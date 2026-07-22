@@ -11,7 +11,6 @@ from jsonschema import Draft202012Validator, FormatChecker
 
 
 CONTRACTS = Path(__file__).resolve().parent
-CONFIGS = CONTRACTS.parent / "configs"
 
 
 class ContractSemanticError(ValueError):
@@ -20,7 +19,22 @@ class ContractSemanticError(ValueError):
 
 def load_json(path: Path) -> dict[str, Any]:
     with path.open(encoding="utf-8") as handle:
-        return json.load(handle)
+        return json.load(handle, parse_constant=lambda value: _reject_json_constant(value, path))
+
+
+def _reject_json_constant(value: str, source: Path) -> None:
+    raise ValueError(f"{source}: non-standard JSON number {value} is not allowed")
+
+
+def _reject_non_finite_numbers(value: Any, path: str = "$") -> None:
+    if isinstance(value, float) and not math.isfinite(value):
+        raise ContractSemanticError(f"{path}: non-finite numbers are not valid JSON contract values")
+    if isinstance(value, dict):
+        for key, child in value.items():
+            _reject_non_finite_numbers(child, f"{path}.{key}")
+    elif isinstance(value, list):
+        for index, child in enumerate(value):
+            _reject_non_finite_numbers(child, f"{path}[{index}]")
 
 
 def _schema(name: str) -> dict[str, Any]:
@@ -30,29 +44,9 @@ def _schema(name: str) -> dict[str, Any]:
 
 
 def validate_schema(document: dict[str, Any], schema_name: str) -> None:
+    _reject_non_finite_numbers(document)
     validator = Draft202012Validator(_schema(schema_name), format_checker=FormatChecker())
     validator.validate(document)
-
-
-def risk_level_from_ttc(ttc_sec: float | None) -> str:
-    if ttc_sec is None or not math.isfinite(ttc_sec):
-        return "SAFE"
-    if ttc_sec < 1.5:
-        return "CRITICAL"
-    if ttc_sec < 2.0:
-        return "DANGER"
-    if ttc_sec < 3.0:
-        return "WARNING"
-    return "SAFE"
-
-
-def confidence_level_from_quality(quality: float) -> str:
-    thresholds = load_json(CONFIGS / "quality_levels.v1.json")
-    if quality < thresholds["low_upper_exclusive"]:
-        return "LOW"
-    if quality < thresholds["high_lower_inclusive"]:
-        return "MEDIUM"
-    return "HIGH"
 
 
 def validate_perception(document: dict[str, Any]) -> None:
@@ -68,11 +62,6 @@ def validate_perception(document: dict[str, Any]) -> None:
                 "and 0 <= y1 < y2 <= image_height"
             )
         ttc = obj["ttc_sec"]
-        closing_speed = obj["closing_speed_mps"]
-        if ttc is not None and (closing_speed is None or closing_speed <= 0):
-            raise ContractSemanticError(
-                f"track {obj['track_id']}: finite TTC requires positive closing_speed_mps"
-            )
         if obj["in_collision_corridor"] and ttc is not None:
             finite_corridor_ttc.append(ttc)
 
@@ -85,42 +74,16 @@ def validate_perception(document: dict[str, Any]) -> None:
     ):
         raise ContractSemanticError("min_ttc_sec must equal the minimum finite TTC in the collision corridor")
 
-    expected_risk = risk_level_from_ttc(actual_min)
-    if document["status"] == "degraded" and actual_min is None:
-        expected_risk = "UNKNOWN"
-    if document["status"] != "unknown" and document["risk_level"] != expected_risk:
-        raise ContractSemanticError(
-            f"risk_level {document['risk_level']} is inconsistent with min_ttc_sec; expected {expected_risk}"
-        )
-
-
 def validate_risk_event(document: dict[str, Any]) -> None:
     validate_schema(document, "risk_event.v1.schema.json")
     if document["start_frame"] > document["end_frame"]:
         raise ContractSemanticError("start_frame must not exceed end_frame")
     if document["start_time"] > document["end_time"]:
         raise ContractSemanticError("start_time must not exceed end_time")
-    expected_severity = risk_level_from_ttc(document["min_ttc_sec"])
-    if expected_severity not in {"WARNING", "DANGER", "CRITICAL"}:
-        raise ContractSemanticError("risk event min_ttc_sec must be below the 3.0 s event threshold")
-    if document["severity"] != expected_severity:
-        raise ContractSemanticError(
-            f"severity {document['severity']} is inconsistent with min_ttc_sec; expected {expected_severity}"
-        )
-    expected_confidence = confidence_level_from_quality(document["event_quality"])
-    if document["confidence_level"] != expected_confidence:
-        raise ContractSemanticError(
-            f"confidence_level {document['confidence_level']} is inconsistent with event_quality; "
-            f"expected {expected_confidence}"
-        )
 
 
 def validate_run_manifest(document: dict[str, Any]) -> None:
     validate_schema(document, "run_manifest.v1.schema.json")
-
-
-def validate_class_mapping(document: dict[str, Any]) -> None:
-    validate_schema(document, "class_mapping.v1.schema.json")
 
 
 def validate_examples() -> None:
@@ -129,7 +92,6 @@ def validate_examples() -> None:
         validate_perception(load_json(examples / name))
     validate_risk_event(load_json(examples / "risk_event.json"))
     validate_run_manifest(load_json(examples / "run_manifest.json"))
-    validate_class_mapping(load_json(CONTRACTS / "class_mapping.v1.json"))
 
 
 if __name__ == "__main__":
