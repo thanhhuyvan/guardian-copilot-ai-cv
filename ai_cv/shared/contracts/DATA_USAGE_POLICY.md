@@ -16,11 +16,10 @@
 ## Depth keyframes
 
 - Depth keyframes exist in both practice and scored data and are described by the local starter documentation as available input.
-- Every run must declare one policy: none, validation-only, calibration, direct inference or interpolation.
+- Every run must declare one policy: none, validation-only, calibration, direct inference or interpolation. Two-sided interpolation is offline-only because it reads a future keyframe.
 - Before final submission, direct/interpolated use should be reconfirmed against organizer rules; validation-only experiments are always reported separately from inference features.
 
 ## Redacted and future information
 
 - Ground-truth TTC, redacted 3D locations and future event knowledge are prohibited in causal predictions.
 - `target_id` and coarse `target_class` may be used when present, but usage must be declared in `input_features`.
-
