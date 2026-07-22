@@ -1,6 +1,6 @@
 # Phase 01 - Dataset Audit and Baseline
 
-**Status:** NOT_STARTED  
+**Status:** RESEARCHING  
 **Depends on:** Phase 00
 
 ## Mục tiêu
@@ -32,4 +32,3 @@ Hiểu dữ liệu bằng số liệu, tái lập baseline và tạo mốc metri
 
 - Baseline chạy lại bằng một command.
 - Metric baseline được dùng làm regression gate.
-
