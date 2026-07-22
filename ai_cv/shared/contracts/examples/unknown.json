@@ -1,8 +1,11 @@
 {
   "schema_version": "perception.v1",
+  "run_id": "20260723-contract-smoke",
   "trip_id": "T01d",
   "frame_id": 420,
   "timestamp": 21.0,
+  "image_width": 640,
+  "image_height": 360,
   "status": "unknown",
   "objects": [],
   "min_ttc_sec": null,
@@ -11,4 +14,3 @@
   "latency_ms": 0.0,
   "degraded_reasons": ["road_camera_unavailable"]
 }
-

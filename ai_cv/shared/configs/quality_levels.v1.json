@@ -1,0 +1,6 @@
+{
+  "schema_version": "quality_levels.v1",
+  "low_upper_exclusive": 0.4,
+  "high_lower_inclusive": 0.75,
+  "description": "Mapping from uncalibrated event_quality score to the user-facing confidence level."
+}
