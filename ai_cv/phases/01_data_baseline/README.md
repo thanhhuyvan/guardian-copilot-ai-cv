@@ -7,6 +7,8 @@
 
 Hiểu dữ liệu bằng số liệu, tái lập baseline và tạo mốc metric đáng tin cậy.
 
+Kế hoạch thực thi chi tiết: [`STAGE_01_EXECUTION_PLAN.md`](STAGE_01_EXECUTION_PLAN.md).
+
 ## Câu hỏi nghiên cứu
 
 - Mỗi modality có đủ frame và đồng bộ không?
