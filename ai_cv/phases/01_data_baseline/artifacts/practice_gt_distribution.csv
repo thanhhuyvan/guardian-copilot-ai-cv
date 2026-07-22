@@ -1,0 +1,8 @@
+trip_id,n_frames,finite_gt_count,gt_lt_3_count,gt_lt_2_count,gt_lt_1_5_count,gt_lt_3_episodes,gt_lt_2_episodes,event_types,target_classes
+T01-Sample,600,57,12,10,7,2,2,pedestrian_jaywalk,vehicle:6374;walker:755
+T02-Sample,600,35,19,18,18,1,1,motorcycle_cut_in,bike:247;vehicle:4286
+T03-Sample,600,61,32,29,26,2,2,lead_brake,vehicle:575
+T04-Sample,600,121,76,52,30,2,2,stopped_vehicle_ahead,vehicle:1442;walker:356
+T05-Sample,600,66,47,35,13,3,3,pedestrian_jaywalk;lead_brake,vehicle:796;walker:169
+T06-Sample,600,262,97,60,42,3,3,motorcycle_cut_in;stopped_vehicle_ahead,bike:299;vehicle:6305;walker:206
+TOTAL,3600,602,283,204,136,13,13,,

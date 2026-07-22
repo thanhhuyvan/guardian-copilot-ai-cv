@@ -1,6 +1,7 @@
 # Verify - Phase 01
 
-- [ ] Audit report đủ 16 trip.
+- [x] Audit report đủ 16 trip, frame/timestamp, image integrity, depth và calibration.
+- [ ] Pixel-level stereo alignment được visual verify trên sample đại diện.
 - [ ] Baseline chạy bằng một command.
 - [ ] Sáu prediction CSV pass strict validator trước evaluator.
 - [ ] Baseline causal test và run manifest pass.

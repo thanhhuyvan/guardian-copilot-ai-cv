@@ -9,6 +9,18 @@ Hiểu dữ liệu bằng số liệu, tái lập baseline và tạo mốc metri
 
 Kế hoạch thực thi chi tiết: [`STAGE_01_EXECUTION_PLAN.md`](STAGE_01_EXECUTION_PLAN.md).
 
+## Chạy dataset audit
+
+```powershell
+python ai_cv/phases/01_data_baseline/src/audit_dataset.py `
+  --practice-root Practice_Dataset `
+  --scored-root Hackathon_Dataset_Redacted `
+  --output-dir ai_cv/phases/01_data_baseline/artifacts `
+  --verify-images all
+```
+
+Script chỉ đọc dataset và chỉ ghi report nhỏ vào `artifacts/`.
+
 ## Câu hỏi nghiên cứu
 
 - Mỗi modality có đủ frame và đồng bộ không?
