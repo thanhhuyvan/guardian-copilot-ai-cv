@@ -1,0 +1,37 @@
+name: Research experiment
+description: Propose and track a measurable AI/CV experiment
+title: "[EXP] "
+labels: ["research"]
+body:
+  - type: input
+    id: phase
+    attributes:
+      label: Phase and experiment ID
+      placeholder: "Phase 04 / EXP-04-001"
+    validations:
+      required: true
+  - type: textarea
+    id: hypothesis
+    attributes:
+      label: Hypothesis
+      description: State a falsifiable hypothesis.
+    validations:
+      required: true
+  - type: textarea
+    id: method
+    attributes:
+      label: Method and controlled variables
+    validations:
+      required: true
+  - type: textarea
+    id: metrics
+    attributes:
+      label: Metrics and promotion gate
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: Result and decision
+      description: Complete after running the experiment.
+

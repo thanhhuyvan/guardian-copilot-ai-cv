@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+permissions:
+  contents: read
+
+jobs:
+  structure:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify repository structure
+        shell: pwsh
+        run: ./ai_cv/verification/check_structure.ps1 -SkipDatasetCheck
+
+      - name: Protect against committed competition assets
+        shell: pwsh
+        run: |
+          $forbidden = @('Practice_Dataset', 'Hackathon_Dataset_Redacted', 'Package_starterkit', 'tmp')
+          $found = $forbidden | Where-Object { Test-Path -LiteralPath $_ }
+          if ($found) { throw "Forbidden competition/local assets committed: $($found -join ', ')" }
+

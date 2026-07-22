@@ -1,0 +1,63 @@
+# Competition assets - never commit or upload
+/Practice_Dataset/
+/Hackathon_Dataset_Redacted/
+/Package_starterkit/
+/tmp/
+
+# Generated AI/CV artifacts
+/ai_cv/outputs/predictions/*
+/ai_cv/outputs/events/*
+/ai_cv/outputs/videos/*
+/ai_cv/outputs/reports/*
+/ai_cv/outputs/benchmarks/*
+!/ai_cv/outputs/**/.gitkeep
+!/ai_cv/outputs/README.md
+
+# Model weights and large numeric artifacts
+*.pt
+*.pth
+*.onnx
+*.engine
+*.tflite
+*.ckpt
+*.safetensors
+*.npy
+*.npz
+*.pkl
+*.joblib
+*.mp4
+*.avi
+*.mov
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+
+# Notebooks
+.ipynb_checkpoints/
+
+# IDE and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+credentials*.json
+secrets*.yaml
+secrets*.yml
+

@@ -1,0 +1,9 @@
+# Default owner
+* @thanhhuyvan
+
+# AI/CV contracts and release verification require CV-owner review
+/ai_cv/shared/contracts/ @thanhhuyvan
+/ai_cv/verification/ @thanhhuyvan
+/docs/VERSIONING.md @thanhhuyvan
+/VERSION @thanhhuyvan
+
