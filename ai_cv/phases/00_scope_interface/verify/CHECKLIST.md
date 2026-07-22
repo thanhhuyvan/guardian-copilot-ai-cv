@@ -2,7 +2,6 @@
 
 - [ ] Product direction đã chốt.
 - [ ] Core/auxiliary/stretch scope đã chốt.
-- [ ] Hai schema và ba status example hợp lệ.
+- [x] Hai schema và ba status example parse/smoke-check hợp lệ.
 - [ ] Integration owner đã review.
 - [ ] KPI và deployment target có số đo rõ.
-

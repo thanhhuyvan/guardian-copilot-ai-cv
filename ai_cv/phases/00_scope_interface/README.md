@@ -1,6 +1,6 @@
 # Phase 00 - Scope and Interface Freeze
 
-**Status:** NOT_STARTED  
+**Status:** RESEARCHING  
 **Depends on:** Không có
 
 ## Mục tiêu
@@ -31,4 +31,3 @@ Khóa phạm vi AI/CV, deployment direction và contract bàn giao trước khi 
 
 - Không còn quyết định lớn chưa có owner.
 - Interface không phụ thuộc implementation cụ thể.
-

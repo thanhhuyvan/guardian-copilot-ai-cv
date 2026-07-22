@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://guardian-copilot.local/schemas/risk_event.v1.schema.json",
+  "title": "GuardianCoPilot Collision Risk Event v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "event_id",
+    "trip_id",
+    "start_frame",
+    "end_frame",
+    "start_time",
+    "end_time",
+    "min_ttc_sec",
+    "object_type",
+    "track_id",
+    "severity",
+    "confidence",
+    "clip_path"
+  ],
+  "properties": {
+    "schema_version": { "const": "risk_event.v1" },
+    "event_id": { "type": "string", "minLength": 1 },
+    "trip_id": { "type": "string", "minLength": 1 },
+    "start_frame": { "type": "integer", "minimum": 0 },
+    "end_frame": { "type": "integer", "minimum": 0 },
+    "start_time": { "type": "number", "minimum": 0 },
+    "end_time": { "type": "number", "minimum": 0 },
+    "min_ttc_sec": { "type": "number", "exclusiveMinimum": 0 },
+    "object_type": {
+      "enum": ["car", "truck", "bus", "motorcycle", "bicycle", "pedestrian", "obstacle", "unknown"]
+    },
+    "track_id": { "type": "integer", "minimum": 0 },
+    "severity": { "enum": ["WARNING", "DANGER", "CRITICAL"] },
+    "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+    "clip_path": { "type": ["string", "null"] }
+  }
+}
+

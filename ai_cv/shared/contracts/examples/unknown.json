@@ -1,0 +1,14 @@
+{
+  "schema_version": "perception.v1",
+  "trip_id": "T01d",
+  "frame_id": 420,
+  "timestamp": 21.0,
+  "status": "unknown",
+  "objects": [],
+  "min_ttc_sec": null,
+  "risk_level": "UNKNOWN",
+  "perception_quality": 0.0,
+  "latency_ms": 0.0,
+  "degraded_reasons": ["road_camera_unavailable"]
+}
+
