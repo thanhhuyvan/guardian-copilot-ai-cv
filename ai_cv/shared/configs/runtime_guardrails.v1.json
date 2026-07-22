@@ -1,0 +1,17 @@
+{
+  "schema_version": "runtime_guardrails.v1",
+  "research_policy": {
+    "measure_every_promoted_experiment": true,
+    "required_metrics": ["wall_time_sec", "frames_per_second", "p50_latency_ms", "p95_latency_ms"],
+    "record_hardware": true
+  },
+  "out_car_provisional": {
+    "target_real_time_factor_lte": 1.0,
+    "hard_gate_phase": "06_robustness_latency"
+  },
+  "in_car_reuse_informational": {
+    "target_frames_per_second_gte": 20,
+    "target_perception_p95_latency_ms_lte": 50
+  }
+}
+

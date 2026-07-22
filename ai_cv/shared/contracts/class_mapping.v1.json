@@ -1,0 +1,11 @@
+{
+  "schema_version": "class_mapping.v1",
+  "source": "dataset.target_class",
+  "mapping": {
+    "vehicle": "vehicle",
+    "walker": "pedestrian",
+    "bike": "two_wheeler"
+  },
+  "notes": "The source label bike is intentionally mapped to coarse two_wheeler. A detector may refine it to motorcycle or bicycle only when its own evidence supports that distinction."
+}
+
