@@ -18,7 +18,7 @@ Select a TTC method using measurable evidence on the six practice trips while pr
 ## Recommended research order
 
 1. Reproduce M0 and freeze its metrics.
-2. Audit whether depth keyframes are valid inputs and quantify their quality.
+2. Audit whether depth keyframes are valid inputs, declare their manifest policy and quantify their quality.
 3. Build M1 with simple tracking and robust target depth.
 4. Add M2 as a second TTC cue and disagreement detector.
 5. Evaluate M3 only if stereo is a dominant failure mode.
@@ -29,7 +29,9 @@ Select a TTC method using measurable evidence on the six practice trips while pr
 - Use the same six practice trips and official evaluator for every candidate.
 - Report mean and per-trip composite, critical MAE, danger F1 and inverse-TTC MAE.
 - Track false positives, missed danger frames, TTC jitter and detection delay.
-- Record P50/P95 latency and hardware when implementation is available.
+- Record P50/P95 latency, throughput and hardware for every promoted implementation.
+- Store a run manifest with code commit, model/config versions, dataset and processing mode.
+- In `causal_online`, use neither future frames nor the future schedule in `events_log`.
 - Change one major factor per experiment where possible.
 
 ## Promotion gate
@@ -39,4 +41,3 @@ A candidate advances only if it improves official composite or a documented crit
 ## Initial decision
 
 M1 is the default engineering direction because it directly fixes the baseline's largest conceptual error: estimating one scalar depth from a fixed image region rather than estimating motion for the collision-relevant target.
-

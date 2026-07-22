@@ -6,42 +6,83 @@
   "additionalProperties": false,
   "required": [
     "schema_version",
+    "run_id",
     "trip_id",
     "frame_id",
     "timestamp",
+    "image_width",
+    "image_height",
     "status",
     "objects",
     "min_ttc_sec",
     "risk_level",
     "perception_quality",
-    "latency_ms"
+    "latency_ms",
+    "degraded_reasons"
   ],
   "properties": {
     "schema_version": { "const": "perception.v1" },
+    "run_id": { "type": "string", "minLength": 1 },
     "trip_id": { "type": "string", "minLength": 1 },
     "frame_id": { "type": "integer", "minimum": 0 },
-    "timestamp": { "type": "number", "minimum": 0 },
+    "timestamp": {
+      "description": "Frame timestamp in seconds from trip start.",
+      "type": "number",
+      "minimum": 0
+    },
+    "image_width": { "type": "integer", "minimum": 1 },
+    "image_height": { "type": "integer", "minimum": 1 },
     "status": { "enum": ["valid", "degraded", "unknown"] },
     "objects": {
       "type": "array",
       "items": { "$ref": "#/$defs/tracked_object" }
     },
     "min_ttc_sec": {
-      "description": "Null represents no finite/reliable TTC; CSV serialization uses inf.",
+      "description": "Minimum reliable TTC for collision-corridor targets. Null means no finite/reliable TTC; CSV uses inf.",
       "type": ["number", "null"],
-      "exclusiveMinimum": 0
+      "minimum": 0
     },
     "risk_level": {
       "enum": ["SAFE", "WARNING", "DANGER", "CRITICAL", "UNKNOWN"]
     },
-    "perception_quality": { "type": "number", "minimum": 0, "maximum": 1 },
-    "latency_ms": { "type": "number", "minimum": 0 },
+    "perception_quality": {
+      "description": "Uncalibrated aggregate quality score, not a probability of correctness.",
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "latency_ms": {
+      "description": "Wall-clock processing latency for this frame in milliseconds on the hardware recorded by run_manifest.v1.",
+      "type": "number",
+      "minimum": 0
+    },
     "degraded_reasons": {
       "type": "array",
       "items": { "type": "string", "minLength": 1 },
       "uniqueItems": true
     }
   },
+  "allOf": [
+    {
+      "if": { "properties": { "status": { "const": "valid" } } },
+      "then": { "properties": { "degraded_reasons": { "maxItems": 0 } } }
+    },
+    {
+      "if": { "properties": { "status": { "enum": ["degraded", "unknown"] } } },
+      "then": { "properties": { "degraded_reasons": { "minItems": 1 } } }
+    },
+    {
+      "if": { "properties": { "status": { "const": "unknown" } } },
+      "then": {
+        "properties": {
+          "objects": { "maxItems": 0 },
+          "min_ttc_sec": { "const": null },
+          "risk_level": { "const": "UNKNOWN" },
+          "perception_quality": { "const": 0 }
+        }
+      }
+    }
+  ],
   "$defs": {
     "tracked_object": {
       "type": "object",
@@ -60,24 +101,49 @@
       "properties": {
         "track_id": { "type": "integer", "minimum": 0 },
         "object_type": {
-          "enum": ["car", "truck", "bus", "motorcycle", "bicycle", "pedestrian", "obstacle", "unknown"]
+          "enum": [
+            "vehicle",
+            "car",
+            "truck",
+            "bus",
+            "two_wheeler",
+            "motorcycle",
+            "bicycle",
+            "pedestrian",
+            "obstacle",
+            "unknown"
+          ]
         },
         "bbox_xyxy": {
+          "description": "Pixel coordinates [x1, y1, x2, y2]; semantic validation enforces ordering and image bounds.",
           "type": "array",
           "prefixItems": [
-            { "type": "number" },
-            { "type": "number" },
-            { "type": "number" },
-            { "type": "number" }
+            { "type": "number", "minimum": 0 },
+            { "type": "number", "minimum": 0 },
+            { "type": "number", "minimum": 0 },
+            { "type": "number", "minimum": 0 }
           ],
           "items": false
         },
-        "detection_confidence": { "type": "number", "minimum": 0, "maximum": 1 },
-        "distance_m": { "type": ["number", "null"], "exclusiveMinimum": 0 },
-        "closing_speed_mps": { "type": ["number", "null"] },
-        "ttc_sec": { "type": ["number", "null"], "exclusiveMinimum": 0 },
+        "detection_confidence": {
+          "description": "Detector-provided class/object score; calibration depends on the detector.",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "distance_m": { "type": ["number", "null"], "minimum": 0 },
+        "closing_speed_mps": {
+          "description": "Positive means approaching; zero/negative means not closing.",
+          "type": ["number", "null"]
+        },
+        "ttc_sec": { "type": ["number", "null"], "minimum": 0 },
         "in_collision_corridor": { "type": "boolean" },
-        "ttc_quality": { "type": "number", "minimum": 0, "maximum": 1 }
+        "ttc_quality": {
+          "description": "Uncalibrated TTC quality score combining detection, depth and track quality.",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
       }
     }
   }

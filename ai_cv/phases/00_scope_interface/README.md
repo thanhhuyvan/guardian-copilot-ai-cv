@@ -1,6 +1,6 @@
 # Phase 00 - Scope and Interface Freeze
 
-**Status:** DONE  
+**Status:** DONE — hardened in repository v0.1.1  
 **Depends on:** Không có
 
 ## Mục tiêu
@@ -16,15 +16,14 @@ Khóa phạm vi AI/CV, deployment direction và contract bàn giao trước khi 
 
 ## Test cần có
 
-- Schema example parse được.
-- Required field không thiếu.
-- Version field có mặt.
-- Payload `valid`, `degraded`, `unknown` đều hợp lệ.
+- JSON Schema và semantic validator đều pass.
+- Negative tests chặn missing/extra fields và quan hệ chéo không hợp lệ.
+- Payload `valid`, `degraded`, `unknown`, risk event và run manifest đều hợp lệ.
 
 ## Verification
 
 - Product direction được ghi thành một câu rõ ràng.
-- `perception.v1` và `risk_event.v1` được integration owner xác nhận.
+- `perception.v1` và `risk_event.v1` đã được CV owner freeze; integration sign-off là gate trước Phase 05.
 - KPI, threshold và Definition of Done được chốt.
 
 ## Exit criteria
@@ -40,4 +39,5 @@ Khóa phạm vi AI/CV, deployment direction và contract bàn giao trước khi 
 - Output chấm điểm: per-frame `predicted_ttc` CSV.
 - Output tích hợp ban đầu: versioned JSON/JSONL file; transport service được để integration layer quyết định sau.
 - DMS, Safety Kernel, CAN, HMI, dashboard và business recommendation ngoài core TTC.
-- Target hardware không chặn nghiên cứu accuracy; latency/hardware gate được xử lý ở Phase 06.
+- Target hardware không chặn nghiên cứu accuracy; mọi experiment được đo runtime sớm, còn latency/hardware hard gate ở Phase 06.
+- Mỗi run khai báo `causal_online` hoặc `offline_post_trip` và có manifest truy vết.
