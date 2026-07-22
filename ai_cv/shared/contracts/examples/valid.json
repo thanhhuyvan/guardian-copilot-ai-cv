@@ -1,0 +1,26 @@
+{
+  "schema_version": "perception.v1",
+  "trip_id": "T01d",
+  "frame_id": 418,
+  "timestamp": 20.9,
+  "status": "valid",
+  "objects": [
+    {
+      "track_id": 7,
+      "object_type": "car",
+      "bbox_xyxy": [212, 126, 431, 328],
+      "detection_confidence": 0.94,
+      "distance_m": 11.6,
+      "closing_speed_mps": 5.2,
+      "ttc_sec": 2.23,
+      "in_collision_corridor": true,
+      "ttc_quality": 0.89
+    }
+  ],
+  "min_ttc_sec": 2.23,
+  "risk_level": "WARNING",
+  "perception_quality": 0.89,
+  "latency_ms": 37.4,
+  "degraded_reasons": []
+}
+

@@ -1,0 +1,16 @@
+{
+  "schema_version": "risk_event.v1",
+  "event_id": "T01d-E003",
+  "trip_id": "T01d",
+  "start_frame": 418,
+  "end_frame": 451,
+  "start_time": 20.9,
+  "end_time": 22.55,
+  "min_ttc_sec": 0.92,
+  "object_type": "car",
+  "track_id": 7,
+  "severity": "CRITICAL",
+  "confidence": 0.91,
+  "clip_path": "clips/T01d-E003.mp4"
+}
+

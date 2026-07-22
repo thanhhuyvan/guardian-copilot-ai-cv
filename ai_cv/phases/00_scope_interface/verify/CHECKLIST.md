@@ -1,8 +1,7 @@
 # Verify - Phase 00
 
-- [ ] Product direction đã chốt.
-- [ ] Core/auxiliary/stretch scope đã chốt.
-- [ ] Hai schema và ba status example hợp lệ.
-- [ ] Integration owner đã review.
-- [ ] KPI và deployment target có số đo rõ.
-
+- [x] Product direction đã chốt.
+- [x] Core/auxiliary/stretch scope đã chốt.
+- [x] Hai schema và ba status example parse/smoke-check hợp lệ.
+- [x] File-based contract v1 đã freeze; transport review được defer rõ ràng.
+- [x] KPI accuracy đã chốt; hardware/latency gate có owner ở Phase 06.

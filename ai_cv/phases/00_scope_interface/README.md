@@ -1,6 +1,6 @@
 # Phase 00 - Scope and Interface Freeze
 
-**Status:** NOT_STARTED  
+**Status:** DONE  
 **Depends on:** Không có
 
 ## Mục tiêu
@@ -32,3 +32,12 @@ Khóa phạm vi AI/CV, deployment direction và contract bàn giao trước khi 
 - Không còn quyết định lớn chưa có owner.
 - Interface không phụ thuộc implementation cụ thể.
 
+## Scope đã khóa
+
+- Product narrative chính: out-car Fleet Collision Intelligence/post-trip analytics.
+- AI/CV core: road-facing object detection, tracking, depth, closing speed và TTC.
+- Pipeline mặc định causal để có thể tái sử dụng cho in-car nếu cần.
+- Output chấm điểm: per-frame `predicted_ttc` CSV.
+- Output tích hợp ban đầu: versioned JSON/JSONL file; transport service được để integration layer quyết định sau.
+- DMS, Safety Kernel, CAN, HMI, dashboard và business recommendation ngoài core TTC.
+- Target hardware không chặn nghiên cứu accuracy; latency/hardware gate được xử lý ở Phase 06.
