@@ -1,6 +1,6 @@
 # Phase 00 - Scope and Interface Freeze
 
-**Status:** DONE — hardened in repository v0.1.1  
+**Status:** DONE — scope frozen; contracts remain internal drafts until integration sign-off  
 **Depends on:** Không có
 
 ## Mục tiêu
@@ -23,8 +23,8 @@ Khóa phạm vi AI/CV, deployment direction và contract bàn giao trước khi 
 ## Verification
 
 - Product direction được ghi thành một câu rõ ràng.
-- `perception.v1` và `risk_event.v1` đã được CV owner freeze; integration sign-off là gate trước Phase 05.
-- KPI, threshold và Definition of Done được chốt.
+- `perception.v1` và `risk_event.v1` là internal draft đã được CV owner kiểm tra; integration sign-off là gate trước khi freeze ở Phase 05.
+- KPI, nominal TTC bands và owner cho các gate còn lại được ghi rõ; state thresholds được tune/freeze ở Phase 05.
 
 ## Exit criteria
 

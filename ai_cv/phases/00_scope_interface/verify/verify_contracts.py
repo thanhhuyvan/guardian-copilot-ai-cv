@@ -16,10 +16,6 @@ from validate_contracts import validate_examples  # noqa: E402
 def main() -> int:
     validate_examples()
     print("Phase 00 contract schema and semantic verification: OK")
-    print("Perception examples checked: 3")
-    print("Risk event examples checked: 1")
-    print("Run manifest examples checked: 1")
-    print("Class mapping checked: 1")
     return 0
 
 

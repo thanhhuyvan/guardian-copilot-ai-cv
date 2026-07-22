@@ -65,10 +65,12 @@
       "then": {
         "properties": {
           "uses_future_frames": { "const": false },
-          "uses_full_event_schedule": { "const": false }
+          "uses_full_event_schedule": { "const": false },
+          "depth_keyframe_policy": {
+            "enum": ["none", "validation_only", "calibration", "direct_inference"]
+          }
         }
       }
     }
   ]
 }
-
