@@ -34,6 +34,9 @@ jobs:
       - name: Run Phase 01 audit unit tests
         run: python -m unittest discover -s ai_cv/phases/01_data_baseline/tests -p "test_*.py"
 
+      - name: Run Phase 02 classical stereo unit tests
+        run: python -m unittest discover -s ai_cv/phases/02_detection_tracking/tests -p "test_*.py"
+
       - name: Verify repository structure
         shell: pwsh
         run: ./ai_cv/verification/check_structure.ps1 -SkipDatasetCheck

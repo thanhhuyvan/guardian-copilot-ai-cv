@@ -192,21 +192,24 @@ Stereo/Depth Estimator              Collision Corridor
 - Pipeline baseline chạy tái lập.
 - Metric baseline được ghi lại và không phụ thuộc thao tác thủ công.
 
-## Phase 2 - Detection và tracking
+## Phase 2 - Target extraction và tracking
 
 ### Công việc
 
-- Chọn pretrained detector phù hợp license và latency.
-- Chuẩn hóa class mapping.
-- Tích hợp tracker.
-- Đánh giá continuity, ID switch và missed detection.
-- Sinh annotated detection/tracking video.
+- Stage 2A: phân tích stereo confidence, ground removal và obstacle
+  components/Stixel-lite.
+- Track geometry components causally và đánh giá continuity/occlusion.
+- Chỉ mở Stage 2B detector/semantic khi Stage 2A có failure đo được chưa giải
+  quyết.
+- Khi mở Stage 2B: kiểm tra license, class mapping, latency và giá trị tăng thêm
+  so với classical candidate.
 
 ### Deliverable
 
-- Detector/tracker module.
-- Track schema.
-- Video demo object ID ổn định.
+- Classical target extractor và confidence/degraded state.
+- Track schema và continuity report.
+- Keep/reject decision cho từng component.
+- Detector/semantic comparison chỉ khi Stage 2B được kích hoạt.
 
 ### Exit criteria
 
