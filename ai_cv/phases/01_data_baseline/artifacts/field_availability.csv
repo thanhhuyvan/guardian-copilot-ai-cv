@@ -1,0 +1,24 @@
+field,practice_trips_present,scored_trips_present,use_class,note
+frames[].ego.speed_kmh,6/6,10/10,deployable_core,Current/past telemetry
+frames[].ego.longitudinal_accel,6/6,10/10,deployable_core,Current/past telemetry
+frames[].ego.lateral_accel,6/6,10/10,deployable_core,Current/past telemetry
+frames[].targets[].target_id,6/6,10/10,organizer_auxiliary,Not deployment-realistic by default
+frames[].targets[].target_class,6/6,10/10,organizer_auxiliary,Not deployment-realistic by default
+events_log[].type,6/6,10/10,organizer_auxiliary,Causal mode may consume only after event time
+events_log[].t,6/6,10/10,organizer_auxiliary,Causal mode may consume only after event time
+events_log[].params,6/6,0/10,practice_ground_truth,Redacted from scored trips
+frames[].targets[].rel_pos,6/6,0/10,practice_ground_truth,Never predictor input
+frames[].targets[].rel_velocity,6/6,0/10,practice_ground_truth,Never predictor input
+frames[].targets[].longitudinal_distance,6/6,0/10,practice_ground_truth,Never predictor input
+frames[].targets[].lateral_distance,6/6,0/10,practice_ground_truth,Never predictor input
+frames[].targets[].closing_speed,6/6,0/10,practice_ground_truth,Never predictor input
+frames[].targets[].ttc_simple,6/6,0/10,practice_ground_truth,Never predictor input
+frames[].targets[].ttc_2d,6/6,0/10,practice_ground_truth,Never predictor input
+frames[].targets[].in_collision_cone,6/6,0/10,practice_ground_truth,Never predictor input
+frames[].min_ttc,6/6,0/10,practice_ground_truth,Evaluation only
+frames[].headway_sec,6/6,0/10,practice_ground_truth,Evaluation only
+frames[].driver.state,6/6,0/10,out_of_core_ground_truth,DMS outside Stage 01 TTC core
+frames[].behavior_flags.harsh_brake,6/6,0/10,practice_ground_truth,Evaluation only
+frames[].risk.final_risk_score,6/6,0/10,practice_ground_truth,Evaluation only
+trip_aggregate.safe_driving_score,6/6,0/10,practice_ground_truth,Evaluation only
+driver_summary.state_distribution_pct,6/6,0/10,out_of_core_ground_truth,DMS outside TTC core

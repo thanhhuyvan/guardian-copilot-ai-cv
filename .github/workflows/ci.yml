@@ -19,7 +19,8 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          # Match the frozen Stage 01 baseline environment and dependency pins.
+          python-version: "3.12"
 
       - name: Install contract test dependencies
         run: python -m pip install -r requirements-dev.txt
@@ -29,6 +30,9 @@ jobs:
 
       - name: Run contract negative tests
         run: python -m unittest discover -s ai_cv/phases/00_scope_interface/tests -p "test_*.py"
+
+      - name: Run Phase 01 audit unit tests
+        run: python -m unittest discover -s ai_cv/phases/01_data_baseline/tests -p "test_*.py"
 
       - name: Verify repository structure
         shell: pwsh
