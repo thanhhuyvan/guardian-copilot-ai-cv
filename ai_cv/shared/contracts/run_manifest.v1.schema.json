@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://guardian-copilot.local/schemas/run_manifest.v1.schema.json",
+  "title": "GuardianCoPilot AI/CV Run Manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "run_id",
+    "created_at",
+    "code_commit",
+    "model_version",
+    "config_sha256",
+    "dataset_id",
+    "processing_mode",
+    "input_features",
+    "uses_future_frames",
+    "uses_full_event_schedule",
+    "depth_keyframe_policy",
+    "hardware",
+    "contract_versions"
+  ],
+  "properties": {
+    "schema_version": { "const": "run_manifest.v1" },
+    "run_id": { "type": "string", "minLength": 1 },
+    "created_at": { "type": "string", "format": "date-time" },
+    "code_commit": { "type": "string", "pattern": "^[0-9a-f]{7,40}$" },
+    "model_version": { "type": "string", "minLength": 1 },
+    "config_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "dataset_id": { "type": "string", "minLength": 1 },
+    "processing_mode": { "enum": ["causal_online", "offline_post_trip"] },
+    "input_features": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "uses_future_frames": { "type": "boolean" },
+    "uses_full_event_schedule": { "type": "boolean" },
+    "depth_keyframe_policy": {
+      "enum": ["none", "validation_only", "calibration", "direct_inference", "interpolation"]
+    },
+    "hardware": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["platform", "accelerator"],
+      "properties": {
+        "platform": { "type": "string", "minLength": 1 },
+        "accelerator": { "type": ["string", "null"] }
+      }
+    },
+    "contract_versions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["perception", "risk_event"],
+      "properties": {
+        "perception": { "const": "perception.v1" },
+        "risk_event": { "const": "risk_event.v1" }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "processing_mode": { "const": "causal_online" } } },
+      "then": {
+        "properties": {
+          "uses_future_frames": { "const": false },
+          "uses_full_event_schedule": { "const": false },
+          "depth_keyframe_policy": {
+            "enum": ["none", "validation_only", "calibration", "direct_inference"]
+          }
+        }
+      }
+    }
+  ]
+}

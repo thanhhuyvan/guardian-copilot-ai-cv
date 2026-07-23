@@ -1,0 +1,16 @@
+{
+  "schema_version": "perception.v1",
+  "run_id": "20260723-contract-smoke",
+  "trip_id": "T01d",
+  "frame_id": 419,
+  "timestamp": 20.95,
+  "image_width": 640,
+  "image_height": 360,
+  "status": "degraded",
+  "objects": [],
+  "min_ttc_sec": null,
+  "risk_level": "UNKNOWN",
+  "perception_quality": 0.2,
+  "latency_ms": 18.1,
+  "degraded_reasons": ["right_camera_unavailable", "stereo_depth_unavailable"]
+}

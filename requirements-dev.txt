@@ -1,0 +1,2 @@
+-r ai_cv/phases/01_data_baseline/requirements.txt
+jsonschema==4.26.0

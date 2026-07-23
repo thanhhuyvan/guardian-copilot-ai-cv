@@ -89,7 +89,7 @@ Tài liệu chỉ bao phủ AI/CV. Safety Kernel, CAN control, HMI, LLM, cloud v
 - `ego.speed_kmh`.
 - `ego.longitudinal_accel` và `ego.lateral_accel`.
 - `target_id`, `target_class` nếu có trong JSON.
-- `events_log.type` và `events_log.t`.
+- `events_log.type` và `events_log.t`; ở `causal_online` chỉ được dùng record đã xảy ra, không được nạp lịch event tương lai.
 
 ### 3.4. Input không được giả định tồn tại
 
@@ -141,9 +141,10 @@ Stereo/Depth Estimator              Collision Corridor
 - TTC phải được tính theo target, không lấy median toàn ảnh làm giải pháp cuối.
 - Chỉ target trong collision corridor mới được ưu tiên cho `min_ttc`.
 - Tracking và temporal context là bắt buộc để tính closing speed ổn định.
-- Confidence phải phản ánh cả detection, depth và tracking quality.
+- Quality score phải phản ánh cả detection, depth và tracking quality; không gọi là xác suất khi chưa calibration.
 - Product output được sinh từ cùng một inference result với CSV submission.
-- Không sử dụng ground truth bị redact hoặc thông tin tương lai không hợp lệ khi đánh giá online.
+- Không sử dụng ground truth bị redact, frame tương lai hoặc full future `events_log` khi đánh giá `causal_online`.
+- Mỗi run phải có `run_manifest.v1` ghi commit, model/config, dataset, processing mode, input, depth policy và hardware.
 
 ---
 
@@ -156,7 +157,7 @@ Stereo/Depth Estimator              Collision Corridor
 - Chốt in-car real-time hay out-car/post-trip là câu chuyện chính.
 - Chốt core challenge là TTC.
 - Chốt schema Perception Stream.
-- Chốt hardware target và dependency policy.
+- Chốt dependency policy và trường runtime cần đo; hardware/SLA chính xác được defer sang Phase 06.
 - Chốt cách backend nhận stream/event.
 
 ### Deliverable
@@ -217,7 +218,7 @@ Stereo/Depth Estimator              Collision Corridor
 ### Công việc
 
 - Tính disparity/depth trong ROI từng target.
-- Dùng depth keyframe để calibration/validation.
+- Dùng depth keyframe theo policy khai báo trong manifest; direct inference/interpolation cần BTC xác nhận trước final submission.
 - Loại road/background/outlier trong bbox.
 - Xây robust distance estimator.
 - Xây closing-speed estimator theo track.
@@ -348,12 +349,12 @@ Không tính metric depth bằng stereo nếu thiếu `fx` hoặc baseline. Ph�
 Mọi tracker, Kalman filter và temporal history phải reset giữa hai trip.
 
 **R-IN-07 - No future leakage**  
-Chế độ online không được dùng frame tương lai để dự đoán frame hiện tại. Smoothing hai chiều chỉ được dùng nếu sản phẩm đã chốt post-trip và phải ghi rõ.
+Chế độ `causal_online` không được dùng frame tương lai hoặc full future `events_log` để dự đoán frame hiện tại. Smoothing hai chiều chỉ được dùng ở `offline_post_trip` và phải ghi rõ trong manifest.
 
 ### B. Detection và tracking rules
 
 **R-DET-01 - Class normalization**  
-Mọi class từ model phải map về taxonomy thống nhất: `car`, `truck`, `bus`, `motorcycle`, `bicycle`, `pedestrian`, `obstacle`, `unknown`.
+Mọi class phải qua mapping version hóa. Dataset `vehicle/walker/bike` map mặc định sang `vehicle/pedestrian/two_wheeler`; chỉ refine `bike` thành motorcycle/bicycle khi detector có bằng chứng.
 
 **R-DET-02 - Confidence gate**  
 Detection dưới threshold không được tạo critical event trực tiếp.
@@ -368,7 +369,7 @@ Track mất quá `max_age` phải kết thúc; không tiếp tục ngoại suy v
 Khi class, bbox hoặc motion thay đổi bất thường, không nối history cũ một cách mù quáng.
 
 **R-DET-06 - No-object frame**  
-Nếu không có target hợp lệ trong corridor, `predicted_ttc=inf`; đây không phải lỗi hệ thống.
+Nếu không có target hợp lệ trong corridor, internal/CSV dùng `inf`, còn JSON contract dùng `null`; đây không phải lỗi hệ thống.
 
 ### C. Depth và distance rules
 
@@ -388,7 +389,7 @@ Nếu số pixel depth hợp lệ dưới ngưỡng, đánh dấu depth low-conf
 Loại giá trị ngoài physical range và spike không phù hợp trajectory.
 
 **R-DEP-06 - Keyframe fusion**  
-Depth `.npy` được phép dùng như input/calibration theo thể lệ, nhưng pipeline phải ghi rõ frame nào dùng keyframe và cách nội suy.
+Starter kit cung cấp depth `.npy`; mọi cách dùng phải được khai báo trong manifest. Direct/interpolated use cho final submission cần được BTC xác nhận.
 
 **R-DEP-07 - Distance continuity**  
 Khoảng cách thay đổi vượt giới hạn vật lý giữa hai frame phải bị giảm confidence hoặc reset estimator.
@@ -399,10 +400,10 @@ Khoảng cách thay đổi vượt giới hạn vật lý giữa hai frame phả
 Với target đang tiến gần: `TTC = distance / closing_speed`.
 
 **R-TTC-02 - Non-closing target**  
-Nếu `closing_speed <= epsilon`, TTC phải là `inf`, không phải số âm hoặc cực lớn.
+Với phương pháp range-rate, nếu `closing_speed <= epsilon`, internal TTC là `inf` và JSON là `null`. Quy tắc này không áp cho phương pháp TTC trực tiếp từ image scale/flow.
 
 **R-TTC-03 - Insufficient history**  
-Track chưa đủ temporal history phải trả `inf/unknown` hoặc confidence thấp; không suy TTC chắc chắn từ một frame.
+Track chưa đủ temporal history phải trả internal `inf`, JSON `null`, hoặc quality thấp; TTC trực tiếp một-frame chỉ hợp lệ khi phương pháp và uncertainty được ghi rõ.
 
 **R-TTC-04 - Per-target TTC**  
 TTC được tính riêng theo `track_id` để tránh trộn distance của hai vật thể.
@@ -411,7 +412,7 @@ TTC được tính riêng theo `track_id` để tránh trộn distance của hai
 `predicted_ttc` của frame là TTC nhỏ nhất trong các target hợp lệ thuộc collision corridor.
 
 **R-TTC-06 - Physical bounds**  
-TTC âm, NaN hoặc không hợp lệ phải chuyển thành `inf`. TTC hữu hạn có thể clip ở mức cấu hình để tránh số bất thường.
+TTC âm, NaN hoặc không hợp lệ phải chuyển thành internal/CSV `inf` và JSON `null`. TTC hữu hạn có thể clip ở mức cấu hình để tránh số bất thường.
 
 **R-TTC-07 - Critical-distance handling**  
 Không được tự động loại mọi depth dưới 1,5 m; đây là vùng nguy hiểm nhất và cần fallback riêng.
@@ -425,7 +426,7 @@ Target ngoài đường đi không được thắng `min_ttc` chỉ vì đứng 
 **R-TTC-10 - Risk thresholds**  
 Mặc định:
 
-- `SAFE`: TTC >= 3,0 s hoặc `inf`.
+- `SAFE`: TTC >= 3,0 s hoặc không có TTC hữu hạn (`inf` internal/CSV, `null` JSON).
 - `WARNING`: 2,0 s <= TTC < 3,0 s.
 - `DANGER`: 1,5 s <= TTC < 2,0 s.
 - `CRITICAL`: TTC < 1,5 s.
@@ -443,7 +444,7 @@ Thiếu một thành phần quan trọng phải giảm confidence; không giữ 
 Nếu chưa calibration, phải gọi đây là quality score thay vì xác suất đúng tuyệt đối.
 
 **R-CONF-04 - Critical action gate**  
-TTC thấp nhưng confidence thấp chỉ được tạo warning/degraded event; quyết định phanh thuộc Safety Kernel, không thuộc CV.
+TTC thấp vẫn giữ physical severity tương ứng; quality thấp phải được ghi `confidence_level=LOW` và không được tự động promote thành intervention/confirmed event. Quyết định phanh thuộc Safety Kernel, không thuộc CV.
 
 ### F. Event aggregation rules
 
@@ -469,7 +470,7 @@ Clip phải gồm pre-event và post-event buffer để người xem hiểu ng�
 Phải phân biệt số frame near-miss của evaluator với số event thực tế của product.
 
 **R-EVT-08 - Event identity**  
-Event cần `event_id`, trip, start/end time, min TTC, object type, track ID, severity và confidence.
+Event cần `run_id`, `event_id`, trip, start/end time, min TTC, object type, track ID, severity, `event_quality` và `confidence_level`.
 
 ### G. Robustness và fallback rules
 
@@ -498,6 +499,8 @@ Report phải hiển thị cả mean và worst-trip metric, không chỉ điểm
 
 **R-PERF-01 - Measure, do not estimate**  
 Latency công bố phải là số đo trên phần cứng được ghi rõ.
+
+Runtime thô được đo từ experiment đầu tiên; Phase 06 là nơi áp dụng hard gate và robustness matrix đầy đủ.
 
 **R-PERF-02 - Separate stages**  
 Đo riêng decode/preprocess, detection, depth, tracking/TTC và serialization.
@@ -578,54 +581,8 @@ Một experiment chỉ được promote nếu:
 
 ## 8. Schema bàn giao
 
-### 8.1. Frame perception payload
-
-```json
-{
-  "schema_version": "perception.v1",
-  "trip_id": "T01d",
-  "frame_id": 418,
-  "timestamp": 20.9,
-  "status": "valid",
-  "objects": [
-    {
-      "track_id": 7,
-      "object_type": "car",
-      "bbox_xyxy": [212, 126, 431, 328],
-      "detection_confidence": 0.94,
-      "distance_m": 11.6,
-      "closing_speed_mps": 5.2,
-      "ttc_sec": 2.23,
-      "in_collision_corridor": true,
-      "ttc_quality": 0.89
-    }
-  ],
-  "min_ttc_sec": 2.23,
-  "risk_level": "WARNING",
-  "perception_quality": 0.89,
-  "latency_ms": 37.4
-}
-```
-
-### 8.2. Event payload
-
-```json
-{
-  "schema_version": "risk_event.v1",
-  "event_id": "T01d-E003",
-  "trip_id": "T01d",
-  "start_frame": 418,
-  "end_frame": 451,
-  "start_time": 20.9,
-  "end_time": 22.55,
-  "min_ttc_sec": 0.92,
-  "object_type": "car",
-  "track_id": 7,
-  "severity": "CRITICAL",
-  "confidence": 0.91,
-  "clip_path": "clips/T01d-E003.mp4"
-}
-```
+Canonical schemas, semantics and examples nằm tại [`ai_cv/shared/contracts`](ai_cv/shared/contracts/README.md).
+Không copy payload vào tài liệu này để tránh hai nguồn contract bị lệch nhau.
 
 ---
 

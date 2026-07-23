@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://guardian-copilot.local/schemas/risk_event.v1.schema.json",
+  "title": "GuardianCoPilot Collision Risk Event v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "run_id",
+    "event_id",
+    "trip_id",
+    "start_frame",
+    "end_frame",
+    "start_time",
+    "end_time",
+    "min_ttc_sec",
+    "object_type",
+    "track_id",
+    "severity",
+    "event_quality",
+    "confidence_level",
+    "clip_path"
+  ],
+  "properties": {
+    "schema_version": { "const": "risk_event.v1" },
+    "run_id": { "type": "string", "minLength": 1 },
+    "event_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]+-E[0-9]+$"
+    },
+    "trip_id": { "type": "string", "minLength": 1 },
+    "start_frame": { "type": "integer", "minimum": 0 },
+    "end_frame": { "type": "integer", "minimum": 0 },
+    "start_time": { "type": "number", "minimum": 0 },
+    "end_time": { "type": "number", "minimum": 0 },
+    "min_ttc_sec": { "type": "number", "minimum": 0 },
+    "object_type": {
+      "enum": [
+        "vehicle",
+        "car",
+        "truck",
+        "bus",
+        "two_wheeler",
+        "motorcycle",
+        "bicycle",
+        "pedestrian",
+        "obstacle",
+        "unknown"
+      ]
+    },
+    "track_id": { "type": "integer", "minimum": 0 },
+    "severity": { "enum": ["WARNING", "DANGER", "CRITICAL"] },
+    "event_quality": {
+      "description": "Uncalibrated aggregate event quality score, not a probability.",
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "confidence_level": { "enum": ["LOW", "MEDIUM", "HIGH"] },
+    "clip_path": { "type": ["string", "null"] }
+  }
+}
+

@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "run_id": "baseline-official-001",
+  "date": "2026-07-23",
+  "git_commit_at_run": "8b2aa0c6d4a2bd7dc6270f241fb36076d52d1dc9",
+  "execution": "sequential_cpu",
+  "platform": "Windows-11-10.0.26200-SP0",
+  "processor": "Intel64 Family 6 Model 154 Stepping 4, GenuineIntel",
+  "python": "3.12.13",
+  "dependencies": {
+    "opencv": "5.0.0",
+    "numpy": "2.5.1",
+    "pandas": "3.0.5"
+  },
+  "source_sha256": {
+    "baseline_ttc_predictor.py": "1f63dac68683bdd5316c38f8d860063148c7841d0b40e64dbeab9549ba0b2fa7",
+    "dataset_loader.py": "e0daa2a2e698d0b808eaf39aed644f970b2f45dd20b6575affa3fb2820bb9b0c",
+    "evaluation.py": "674320460240797c2cb3a2b60815629c1cc1dcdcd9cc17ad52988c3dd353065b"
+  },
+  "trip_wall_time_sec": {
+    "T01-Sample": 33.48,
+    "T02-Sample": 31.481,
+    "T03-Sample": 32.118,
+    "T04-Sample": 33.476,
+    "T05-Sample": 33.792,
+    "T06-Sample": 32.644
+  },
+  "total_wall_time_sec": 196.991,
+  "effective_fps": 18.28,
+  "latency_note": "End-to-end wall time only; P50/P95 per-frame instrumentation is deferred to Stage 2 candidates."
+}

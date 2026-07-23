@@ -1,0 +1,17 @@
+{
+  "schema_version": "risk_event.v1",
+  "run_id": "20260723-contract-smoke",
+  "event_id": "T01d-E003",
+  "trip_id": "T01d",
+  "start_frame": 418,
+  "end_frame": 451,
+  "start_time": 20.9,
+  "end_time": 22.55,
+  "min_ttc_sec": 0.92,
+  "object_type": "car",
+  "track_id": 7,
+  "severity": "CRITICAL",
+  "event_quality": 0.91,
+  "confidence_level": "HIGH",
+  "clip_path": "clips/T01d-E003.mp4"
+}

@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "reference": "organizer_baseline_unmodified",
+  "practice_trips": 6,
+  "frames": 3600,
+  "metrics": {
+    "overall_mae_critical": 38.046,
+    "overall_inv_ttc_mae": 0.2982,
+    "overall_f1": 0.22,
+    "overall_composite_score": 19.7,
+    "worst_trip": "T03-Sample",
+    "worst_trip_composite_score": 5.0
+  },
+  "tolerance": {
+    "overall_mae_critical": 0.001,
+    "overall_inv_ttc_mae": 0.0001,
+    "overall_f1": 0.001,
+    "overall_composite_score": 0.1
+  },
+  "notes": [
+    "This is a local regression reference, not a leaderboard score.",
+    "The starter-kit README value 52.3 is stale or illustrative and is not the regression target.",
+    "Predictions must pass strict validation before evaluation."
+  ]
+}

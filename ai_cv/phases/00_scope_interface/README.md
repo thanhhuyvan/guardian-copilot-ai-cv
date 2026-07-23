@@ -1,6 +1,6 @@
 # Phase 00 - Scope and Interface Freeze
 
-**Status:** NOT_STARTED  
+**Status:** DONE — scope frozen; contracts remain internal drafts until integration sign-off  
 **Depends on:** Không có
 
 ## Mục tiêu
@@ -16,19 +16,28 @@ Khóa phạm vi AI/CV, deployment direction và contract bàn giao trước khi 
 
 ## Test cần có
 
-- Schema example parse được.
-- Required field không thiếu.
-- Version field có mặt.
-- Payload `valid`, `degraded`, `unknown` đều hợp lệ.
+- JSON Schema và semantic validator đều pass.
+- Negative tests chặn missing/extra fields và quan hệ chéo không hợp lệ.
+- Payload `valid`, `degraded`, `unknown`, risk event và run manifest đều hợp lệ.
 
 ## Verification
 
 - Product direction được ghi thành một câu rõ ràng.
-- `perception.v1` và `risk_event.v1` được integration owner xác nhận.
-- KPI, threshold và Definition of Done được chốt.
+- `perception.v1` và `risk_event.v1` là internal draft đã được CV owner kiểm tra; integration sign-off là gate trước khi freeze ở Phase 05.
+- KPI, nominal TTC bands và owner cho các gate còn lại được ghi rõ; state thresholds được tune/freeze ở Phase 05.
 
 ## Exit criteria
 
 - Không còn quyết định lớn chưa có owner.
 - Interface không phụ thuộc implementation cụ thể.
 
+## Scope đã khóa
+
+- Product narrative chính: out-car Fleet Collision Intelligence/post-trip analytics.
+- AI/CV core: road-facing object detection, tracking, depth, closing speed và TTC.
+- Pipeline mặc định causal để có thể tái sử dụng cho in-car nếu cần.
+- Output chấm điểm: per-frame `predicted_ttc` CSV.
+- Output tích hợp ban đầu: versioned JSON/JSONL file; transport service được để integration layer quyết định sau.
+- DMS, Safety Kernel, CAN, HMI, dashboard và business recommendation ngoài core TTC.
+- Target hardware không chặn nghiên cứu accuracy; mọi experiment được đo runtime sớm, còn latency/hardware hard gate ở Phase 06.
+- Mỗi run khai báo `causal_online` hoặc `offline_post_trip` và có manifest truy vết.
