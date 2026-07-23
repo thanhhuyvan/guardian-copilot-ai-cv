@@ -1,5 +1,9 @@
 # Stage 01 Execution Plan — Dataset Audit and Baseline
 
+> **Closure note (2026-07-23):** Stage 01 đã hoàn tất. Đây là execution plan
+> ban đầu; kết quả thực tế, thay đổi gate và deliberate deferrals được ghi tại
+> [`artifacts/STAGE_01_REPORT.md`](artifacts/STAGE_01_REPORT.md).
+
 ## 1. Mục tiêu
 
 Stage 01 chưa tối ưu thuật toán TTC. Mục tiêu là tạo một nền đo đáng tin cậy trước khi

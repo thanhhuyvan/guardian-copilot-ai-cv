@@ -6,8 +6,10 @@
 no blocking data-integrity errors. The run inspected 21,600 frame records, loaded
 all 4,320 depth keyframes, and decoded all 64,800 road/driver JPEG files.
 
-**Gate S1.2 remains open.** Calibration values and stereo pair counts are
-consistent, but sampled pixel-level stereo alignment still needs visual review.
+**Gate S1.2 passes at Stage 1 scope.** Calibration values and stereo pair counts
+are consistent. Sampled left/right disparity diagnostics showed no gross
+registration error. Exhaustive stereo confidence and sub-pixel error analysis is
+carried into Stage 2A rather than treated as proven.
 
 ## Confirmed properties
 
