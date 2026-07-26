@@ -141,6 +141,12 @@ class ComponentTracker:
         self.maximum_missed = maximum_missed
         self.tracks: dict[int, ComponentTrack] = {}
         self.next_track_id = 1
+        self._risk_corridor = collision_corridor_mask(
+            self.image_shape,
+            top_width_fraction=0.16,
+            bottom_width_fraction=0.55,
+        )
+        self._risk_corridor.flags.writeable = False
 
     def _depth(self, component: ObstacleComponent) -> float:
         return float(getattr(component, self.depth_attribute))
@@ -221,11 +227,6 @@ class ComponentTracker:
         ]
 
     def risk_tracks(self, tracks: Iterable[ComponentTrack]) -> list[ComponentTrack]:
-        corridor = collision_corridor_mask(
-            self.image_shape,
-            top_width_fraction=0.16,
-            bottom_width_fraction=0.55,
-        )
         height, width = self.image_shape
         selected = []
         for track in tracks:
@@ -234,7 +235,7 @@ class ComponentTracker:
             x0, y0, x1, y1 = track.bbox
             center_x = int(np.clip((x0 + x1) / 2, 0, width - 1))
             bottom_y = int(np.clip(y1 - 1, 0, height - 1))
-            if corridor[bottom_y, center_x]:
+            if self._risk_corridor[bottom_y, center_x]:
                 selected.append(track)
         return selected
 

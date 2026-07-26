@@ -13,6 +13,7 @@ import csv
 import json
 import math
 import time
+from concurrent.futures import Executor
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Iterable
@@ -118,6 +119,12 @@ DEFAULT_CASES = (
 )
 
 
+def configure_opencv_threads(thread_count: int) -> None:
+    if thread_count < 1:
+        raise ValueError("OpenCV thread count must be positive")
+    cv2.setNumThreads(thread_count)
+
+
 def create_left_matcher() -> cv2.StereoSGBM:
     return cv2.StereoSGBM_create(
         minDisparity=0,
@@ -154,11 +161,29 @@ def compute_disparities(
     right_bgr: np.ndarray,
     left_matcher: cv2.StereoSGBM,
     right_matcher: cv2.StereoSGBM,
+    *,
+    executor: Executor | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     left_disparity, right_disparity, _, _ = compute_disparities_with_timing(
-        left_bgr, right_bgr, left_matcher, right_matcher
+        left_bgr,
+        right_bgr,
+        left_matcher,
+        right_matcher,
+        executor=executor,
     )
     return left_disparity, right_disparity
+
+
+def _compute_matcher_disparity(
+    matcher: cv2.StereoSGBM,
+    reference_gray: np.ndarray,
+    target_gray: np.ndarray,
+) -> tuple[np.ndarray, float]:
+    started = time.perf_counter()
+    disparity = (
+        matcher.compute(reference_gray, target_gray).astype(np.float32) / 16.0
+    )
+    return disparity, (time.perf_counter() - started) * 1000.0
 
 
 def compute_disparities_with_timing(
@@ -166,20 +191,95 @@ def compute_disparities_with_timing(
     right_bgr: np.ndarray,
     left_matcher: cv2.StereoSGBM,
     right_matcher: cv2.StereoSGBM,
+    *,
+    executor: Executor | None = None,
 ) -> tuple[np.ndarray, np.ndarray, float, float]:
     left_gray = cv2.cvtColor(left_bgr, cv2.COLOR_BGR2GRAY)
     right_gray = cv2.cvtColor(right_bgr, cv2.COLOR_BGR2GRAY)
-    started = time.perf_counter()
-    left_disparity = (
-        left_matcher.compute(left_gray, right_gray).astype(np.float32) / 16.0
-    )
-    left_match_ms = (time.perf_counter() - started) * 1000.0
-    started = time.perf_counter()
-    right_disparity = (
-        right_matcher.compute(right_gray, left_gray).astype(np.float32) / 16.0
-    )
-    right_match_ms = (time.perf_counter() - started) * 1000.0
+    if executor is None:
+        left_disparity, left_match_ms = _compute_matcher_disparity(
+            left_matcher,
+            left_gray,
+            right_gray,
+        )
+        right_disparity, right_match_ms = _compute_matcher_disparity(
+            right_matcher,
+            right_gray,
+            left_gray,
+        )
+    else:
+        left_future = executor.submit(
+            _compute_matcher_disparity,
+            left_matcher,
+            left_gray,
+            right_gray,
+        )
+        right_future = executor.submit(
+            _compute_matcher_disparity,
+            right_matcher,
+            right_gray,
+            left_gray,
+        )
+        left_disparity, left_match_ms = left_future.result()
+        right_disparity, right_match_ms = right_future.result()
     return left_disparity, right_disparity, left_match_ms, right_match_ms
+
+
+def compute_cropped_disparities_with_timing(
+    left_bgr: np.ndarray,
+    right_bgr: np.ndarray,
+    left_matcher: cv2.StereoSGBM,
+    right_matcher: cv2.StereoSGBM,
+    *,
+    roi_top: int = 0,
+    executor: Executor | None = None,
+) -> tuple[np.ndarray, np.ndarray, float, float]:
+    """Compute rows at or below ``roi_top`` and restore native output shape.
+
+    This is an opt-in latency experiment. ``roi_top=0`` delegates directly to
+    the full-frame Stage 2A implementation. Discarded rows use OpenCV SGBM's
+    normal invalid disparity sentinels and are therefore rejected by every
+    downstream validity mask.
+    """
+    if left_bgr.shape != right_bgr.shape:
+        raise ValueError(
+            f"left/right image shapes must match: {left_bgr.shape} != "
+            f"{right_bgr.shape}"
+        )
+    if left_bgr.ndim != 3 or left_bgr.shape[2] != 3:
+        raise ValueError(
+            f"stereo images must have shape [H,W,3], got {left_bgr.shape}"
+        )
+    if roi_top < 0 or roi_top >= left_bgr.shape[0]:
+        raise ValueError(
+            f"roi_top must be in [0, {left_bgr.shape[0] - 1}], got {roi_top}"
+        )
+    if roi_top == 0:
+        return compute_disparities_with_timing(
+            left_bgr,
+            right_bgr,
+            left_matcher,
+            right_matcher,
+            executor=executor,
+        )
+
+    cropped_left, cropped_right, left_ms, right_ms = (
+        compute_disparities_with_timing(
+            left_bgr[roi_top:, :, :],
+            right_bgr[roi_top:, :, :],
+            left_matcher,
+            right_matcher,
+            executor=executor,
+        )
+    )
+    native_shape = left_bgr.shape[:2]
+    left_disparity = np.full(native_shape, -1.0, dtype=np.float32)
+    right_disparity = np.full(
+        native_shape, -float(NUM_DISPARITIES + 1), dtype=np.float32
+    )
+    left_disparity[roi_top:, :] = cropped_left
+    right_disparity[roi_top:, :] = cropped_right
+    return left_disparity, right_disparity, left_ms, right_ms
 
 
 def left_right_consistency(

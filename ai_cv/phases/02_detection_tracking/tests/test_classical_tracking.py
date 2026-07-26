@@ -5,6 +5,7 @@ import math
 import sys
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 SRC = Path(__file__).resolve().parents[1] / "src"
@@ -85,6 +86,44 @@ class TrackingTests(unittest.TestCase):
         tracker.update([], 0.10)
         second_id = tracker.update([component(120, 8.0)], 0.15)[0].track_id
         self.assertNotEqual(first_id, second_id)
+
+    def test_risk_corridor_is_cached_without_changing_selection(self) -> None:
+        original_factory = TRACKING.collision_corridor_mask
+        with mock.patch.object(
+            TRACKING,
+            "collision_corridor_mask",
+            wraps=original_factory,
+        ) as corridor_factory:
+            tracker = TRACKING.ComponentTracker((200, 300))
+            tracks = []
+            for frame_index in range(3):
+                tracks = tracker.update(
+                    [component(120, 8.0), component(0, 12.0)],
+                    frame_index * 0.05,
+                )
+            first_selection = tracker.risk_tracks(tracks)
+            second_selection = tracker.risk_tracks(tracks)
+
+        reference_corridor = original_factory(
+            (200, 300),
+            top_width_fraction=0.16,
+            bottom_width_fraction=0.55,
+        )
+        expected_ids = [
+            track.track_id
+            for track in tracks
+            if reference_corridor[
+                min(199, track.bbox[3] - 1),
+                int((track.bbox[0] + track.bbox[2]) / 2),
+            ]
+        ]
+        self.assertEqual(
+            [track.track_id for track in first_selection],
+            expected_ids,
+        )
+        self.assertEqual(second_selection, first_selection)
+        corridor_factory.assert_called_once()
+        self.assertFalse(tracker._risk_corridor.flags.writeable)
 
 
 if __name__ == "__main__":

@@ -9,6 +9,8 @@ import math
 import sys
 import time
 from collections import deque
+from concurrent.futures import Executor, ThreadPoolExecutor
+from contextlib import nullcontext
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -20,7 +22,8 @@ import numpy as np
 import pandas as pd
 
 from analyze_stereo_confidence import (
-    compute_disparities_with_timing,
+    compute_cropped_disparities_with_timing,
+    configure_opencv_threads,
     create_left_matcher,
     create_right_matcher,
     left_right_consistency,
@@ -40,14 +43,20 @@ VARIANTS = ("scene_p20", "track_p20", "track_p35", "track_median")
 
 @dataclass(frozen=True)
 class RuntimeRecord:
+    """Per-frame milliseconds; total_compute_ms explicitly excludes image I/O."""
+
     trip_id: str
     frame_id: int
+    io_ms: float
+    stereo_pair_ms: float
     left_match_ms: float
     right_match_ms: float
+    lr_consistency_ms: float
     ground_ms: float
     components_ms: float
     tracking_ms: float
     total_compute_ms: float
+    end_to_end_with_io_ms: float
 
 
 class SceneDepthPolicy:
@@ -96,6 +105,8 @@ def process_trip(
     practice_root: Path,
     output_root: Path,
     starter_root: Path,
+    stereo_executor: Executor | None = None,
+    stereo_roi_top: int = 0,
 ) -> None:
     sys.path.insert(0, str(starter_root.resolve()))
     from team_kit.dataset_loader import TripDataset
@@ -126,17 +137,30 @@ def process_trip(
         frame_started = time.perf_counter()
         left = dataset.load_left(frame.frame_id)
         right = dataset.load_right(frame.frame_id)
+        io_ms = (time.perf_counter() - frame_started) * 1000.0
+
+        compute_started = time.perf_counter()
+        started = time.perf_counter()
         (
             left_disparity,
             right_disparity,
             left_match_ms,
             right_match_ms,
-        ) = compute_disparities_with_timing(
-            left, right, left_matcher, right_matcher
+        ) = compute_cropped_disparities_with_timing(
+            left,
+            right,
+            left_matcher,
+            right_matcher,
+            roi_top=stereo_roi_top,
+            executor=stereo_executor,
         )
+        stereo_pair_ms = (time.perf_counter() - started) * 1000.0
+
+        started = time.perf_counter()
         _, lr_consistent, _ = left_right_consistency(
             left_disparity, right_disparity
         )
+        lr_consistency_ms = (time.perf_counter() - started) * 1000.0
 
         started = time.perf_counter()
         ground_model, _ = estimate_ground_model(left_disparity)
@@ -204,6 +228,9 @@ def process_trip(
                 ),
             )
         tracking_ms = (time.perf_counter() - started) * 1000.0
+        compute_finished = time.perf_counter()
+        total_compute_ms = (compute_finished - compute_started) * 1000.0
+        end_to_end_with_io_ms = (compute_finished - frame_started) * 1000.0
 
         gt_value = (
             "inf" if not math.isfinite(frame.min_ttc) else round(frame.min_ttc, 3)
@@ -250,12 +277,16 @@ def process_trip(
                 RuntimeRecord(
                     trip_id=trip_id,
                     frame_id=frame.frame_id,
+                    io_ms=io_ms,
+                    stereo_pair_ms=stereo_pair_ms,
                     left_match_ms=left_match_ms,
                     right_match_ms=right_match_ms,
+                    lr_consistency_ms=lr_consistency_ms,
                     ground_ms=ground_ms,
                     components_ms=components_ms,
                     tracking_ms=tracking_ms,
-                    total_compute_ms=(time.perf_counter() - frame_started) * 1000.0,
+                    total_compute_ms=total_compute_ms,
+                    end_to_end_with_io_ms=end_to_end_with_io_ms,
                 )
             )
         )
@@ -325,12 +356,16 @@ def aggregate_runtime(output_root: Path) -> dict:
         ignore_index=True,
     )
     columns = [
+        "io_ms",
+        "stereo_pair_ms",
         "left_match_ms",
         "right_match_ms",
+        "lr_consistency_ms",
         "ground_ms",
         "components_ms",
         "tracking_ms",
         "total_compute_ms",
+        "end_to_end_with_io_ms",
     ]
     report = {
         column: {
@@ -422,7 +457,7 @@ def plot_results(
     plt.close(figure)
 
 
-def main() -> int:
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--practice-root", type=Path, default=Path("Practice_Dataset"))
     parser.add_argument(
@@ -435,18 +470,69 @@ def main() -> int:
         type=Path,
         default=Path("Package_starterkit/package_starterkit"),
     )
+    parser.add_argument(
+        "--stereo-workers",
+        type=int,
+        choices=(1, 2),
+        default=1,
+        help="Set to 2 to compute left and right disparity concurrently.",
+    )
+    parser.add_argument(
+        "--opencv-threads",
+        type=int,
+        default=6,
+        help="OpenCV worker threads available to each SGBM matcher.",
+    )
+    parser.add_argument(
+        "--stereo-roi-top",
+        type=int,
+        default=0,
+        help=(
+            "Top crop in native-image rows; 0 preserves the frozen full-frame "
+            "reference, and 96 is the single Phase 2B ROI candidate."
+        ),
+    )
     parser.add_argument("--reuse-predictions", action="store_true")
+    return parser
+
+
+def main() -> int:
+    parser = build_parser()
     args = parser.parse_args()
 
+    if args.opencv_threads < 1:
+        parser.error("--opencv-threads must be positive")
+    if args.stereo_roi_top < 0 or args.stereo_roi_top >= 360:
+        parser.error("--stereo-roi-top must be in [0, 359]")
+    configure_opencv_threads(args.opencv_threads)
     args.output_root.mkdir(parents=True, exist_ok=True)
+    (args.output_root / "run_configuration.json").write_text(
+        json.dumps(
+            {
+                "opencv_threads": args.opencv_threads,
+                "stereo_workers": args.stereo_workers,
+                "stereo_roi_top": args.stereo_roi_top,
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
     if not args.reuse_predictions:
-        for trip_id in TRIPS:
-            process_trip(
-                trip_id,
-                args.practice_root,
-                args.output_root,
-                args.starter_root,
-            )
+        executor_context = (
+            ThreadPoolExecutor(max_workers=2)
+            if args.stereo_workers == 2
+            else nullcontext(None)
+        )
+        with executor_context as stereo_executor:
+            for trip_id in TRIPS:
+                process_trip(
+                    trip_id,
+                    args.practice_root,
+                    args.output_root,
+                    args.starter_root,
+                    stereo_executor=stereo_executor,
+                    stereo_roi_top=args.stereo_roi_top,
+                )
     summary = evaluate_variants(
         args.practice_root, args.output_root, args.starter_root
     )

@@ -21,6 +21,7 @@
 *.tflite
 *.ckpt
 *.safetensors
+*.calibration.cache*
 *.npy
 *.npz
 *.pkl

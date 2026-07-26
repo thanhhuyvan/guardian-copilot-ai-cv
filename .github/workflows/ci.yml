@@ -37,6 +37,9 @@ jobs:
       - name: Run Phase 02 classical stereo unit tests
         run: python -m unittest discover -s ai_cv/phases/02_detection_tracking/tests -p "test_*.py"
 
+      - name: Validate Phase 2B environment setup assets
+        run: python -m unittest discover -s ai_cv/phases/06_robustness_latency/tests -p "test_phase02b_setup_assets.py"
+
       - name: Verify repository structure
         shell: pwsh
         run: ./ai_cv/verification/check_structure.ps1 -SkipDatasetCheck

@@ -1,0 +1,9 @@
+# Guardian Phase 2B classical/reference environment.
+# Keep OpenStereo and its CUDA dependencies in the separate environment.
+jsonschema==4.26.0
+matplotlib==3.10.1
+numpy==1.26.4
+opencv-python-headless==4.11.0.86
+pandas==2.2.3
+Pillow==11.1.0
+psutil==6.1.1

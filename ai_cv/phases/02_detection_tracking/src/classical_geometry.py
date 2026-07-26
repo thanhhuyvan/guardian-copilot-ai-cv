@@ -4,9 +4,22 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from functools import lru_cache
 
 import cv2
 import numpy as np
+
+
+_VERTICAL_OPEN_KERNEL = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 7))
+_HORIZONTAL_CLOSE_KERNEL = cv2.getStructuringElement(cv2.MORPH_RECT, (9, 5))
+_CLEANUP_OPEN_KERNEL = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+
+
+@lru_cache(maxsize=8)
+def _row_coordinates(height: int) -> np.ndarray:
+    rows = np.arange(height, dtype=np.float32)[:, None]
+    rows.flags.writeable = False
+    return rows
 
 
 @dataclass(frozen=True)
@@ -55,16 +68,24 @@ def v_disparity_histogram(
 ) -> np.ndarray:
     height, width = disparity.shape
     bins = int(max_disparity / bin_size)
-    histogram = np.zeros((height, bins), dtype=np.float32)
     x0 = int(width * x_margin_fraction)
     x1 = int(width * (1.0 - x_margin_fraction))
-    for row in range(height):
-        values = disparity[row, x0:x1]
-        values = values[np.isfinite(values) & (values > 0.5) & (values < max_disparity)]
-        if values.size:
-            indices = np.clip((values / bin_size).astype(np.int32), 0, bins - 1)
-            histogram[row] = np.bincount(indices, minlength=bins)
-    return histogram
+    values = disparity[:, x0:x1]
+    valid = np.isfinite(values) & (values > 0.5) & (values < max_disparity)
+    valid_rows = np.nonzero(valid)[0]
+    if not valid_rows.size:
+        return np.zeros((height, bins), dtype=np.float32)
+
+    bin_indices = np.clip(
+        (values[valid] / bin_size).astype(np.int32),
+        0,
+        bins - 1,
+    )
+    flat_indices = valid_rows * bins + bin_indices
+    return np.bincount(
+        flat_indices,
+        minlength=height * bins,
+    ).reshape(height, bins).astype(np.float32)
 
 
 def row_disparity_modes(
@@ -185,6 +206,22 @@ def collision_corridor_mask(
     top_width_fraction: float = 0.24,
     bottom_width_fraction: float = 0.82,
 ) -> np.ndarray:
+    """Return a caller-owned collision-corridor mask."""
+    return _cached_collision_corridor_mask(
+        shape,
+        top_y_fraction,
+        top_width_fraction,
+        bottom_width_fraction,
+    ).copy()
+
+
+@lru_cache(maxsize=16)
+def _cached_collision_corridor_mask(
+    shape: tuple[int, int],
+    top_y_fraction: float,
+    top_width_fraction: float,
+    bottom_width_fraction: float,
+) -> np.ndarray:
     height, width = shape
     mask = np.zeros(shape, dtype=np.uint8)
     top_y = int(height * top_y_fraction)
@@ -199,7 +236,9 @@ def collision_corridor_mask(
         dtype=np.int32,
     )
     cv2.fillConvexPoly(mask, points, 1)
-    return mask.astype(bool)
+    corridor = mask.astype(bool)
+    corridor.flags.writeable = False
+    return corridor
 
 
 def ground_and_obstacle_masks(
@@ -210,7 +249,7 @@ def ground_and_obstacle_masks(
     obstacle_margin_px: float = 1.0,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     height, _ = disparity.shape
-    rows = np.arange(height, dtype=np.float32)[:, None]
+    rows = _row_coordinates(height)
     predicted_ground = ground_model.disparity_at(rows)
     valid = np.isfinite(disparity) & (disparity > 0.5)
     analysis_region = rows >= height * 0.34
@@ -238,28 +277,32 @@ def extract_obstacle_components(
     minimum_area: int = 90,
     minimum_height: int = 12,
 ) -> tuple[list[ObstacleComponent], np.ndarray, np.ndarray]:
-    corridor = collision_corridor_mask(disparity.shape)
-    candidate = obstacle_evidence & corridor
-    binary = candidate.astype(np.uint8) * 255
+    corridor = _cached_collision_corridor_mask(
+        disparity.shape,
+        0.36,
+        0.24,
+        0.82,
+    )
+    binary = np.logical_and(obstacle_evidence, corridor).astype(np.uint8)
     # A road-disparity error usually forms a thin horizontal band. Require
     # vertical support first (Stixel-lite) so those bands cannot become the
     # nearest "obstacle" merely because they span many columns.
     binary = cv2.morphologyEx(
         binary,
         cv2.MORPH_OPEN,
-        cv2.getStructuringElement(cv2.MORPH_RECT, (3, 7)),
+        _VERTICAL_OPEN_KERNEL,
         iterations=1,
     )
     binary = cv2.morphologyEx(
         binary,
         cv2.MORPH_CLOSE,
-        cv2.getStructuringElement(cv2.MORPH_RECT, (9, 5)),
+        _HORIZONTAL_CLOSE_KERNEL,
         iterations=1,
     )
     binary = cv2.morphologyEx(
         binary,
         cv2.MORPH_OPEN,
-        cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3)),
+        _CLEANUP_OPEN_KERNEL,
         iterations=1,
     )
 
@@ -276,9 +319,13 @@ def extract_obstacle_components(
         if width > disparity.shape[1] * 0.75 or height > disparity.shape[0] * 0.75:
             continue
 
-        component_region = labels == label
-        evidence_region = component_region & obstacle_evidence
-        disparities = disparity[evidence_region]
+        y1 = y + height
+        x1 = x + width
+        component_region = labels[y:y1, x:x1] == label
+        evidence_region = (
+            component_region & obstacle_evidence[y:y1, x:x1]
+        )
+        disparities = disparity[y:y1, x:x1][evidence_region]
         disparities = disparities[
             np.isfinite(disparities) & (disparities > 0.5)
         ]
@@ -295,11 +342,15 @@ def extract_obstacle_components(
         depth_mad = float(np.median(np.abs(depths - depth_m)))
         support_pixels = int(np.count_nonzero(evidence_region))
         lr_support = float(
-            np.count_nonzero(evidence_region & lr_consistent)
+            np.count_nonzero(
+                evidence_region & lr_consistent[y:y1, x:x1]
+            )
             / max(1, support_pixels)
         )
         corridor_overlap = float(
-            np.count_nonzero(component_region & corridor)
+            np.count_nonzero(
+                component_region & corridor[y:y1, x:x1]
+            )
             / max(1, np.count_nonzero(component_region))
         )
         density = min(1.0, support_pixels / max(1.0, area))
