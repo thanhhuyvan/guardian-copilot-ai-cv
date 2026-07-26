@@ -21,17 +21,23 @@ SPEC.loader.exec_module(TRACKING)
 from classical_geometry import ObstacleComponent
 
 
-def component(x: int, depth: float) -> ObstacleComponent:
+def component(
+    x: int,
+    depth: float,
+    *,
+    y: int = 100,
+    height: int = 60,
+) -> ObstacleComponent:
     return ObstacleComponent(
         component_id=1,
         x=x,
-        y=100,
+        y=y,
         width=40,
-        height=60,
+        height=height,
         area=1200,
         center_x=x + 20,
-        center_y=130,
-        bottom_y=160,
+        center_y=y + height / 2,
+        bottom_y=y + height,
         depth_m=depth,
         depth_p20_m=depth,
         depth_p35_m=depth,
@@ -124,6 +130,44 @@ class TrackingTests(unittest.TestCase):
         self.assertEqual(second_selection, first_selection)
         corridor_factory.assert_called_once()
         self.assertFalse(tracker._risk_corridor.flags.writeable)
+
+    def test_guarded_corridor_rejects_high_or_short_tracks(self) -> None:
+        tracker = TRACKING.ComponentTracker(
+            (200, 300),
+            minimum_bottom_fraction=0.50,
+            minimum_height_fraction=0.10,
+        )
+        for frame_index in range(3):
+            tracks = tracker.update(
+                [
+                    component(130, 8.0, y=100, height=60),
+                    component(130, 8.0, y=20, height=40),
+                    component(130, 8.0, y=100, height=10),
+                ],
+                frame_index * 0.05,
+            )
+
+        selected = tracker.risk_tracks(tracks)
+
+        self.assertEqual(len(selected), 1)
+        self.assertEqual(selected[0].bbox, (130, 100, 170, 160))
+
+    def test_ttc_selection_rejects_excess_depth(self) -> None:
+        tracker = TRACKING.ComponentTracker((200, 300))
+        for frame_index in range(4):
+            tracks = tracker.update(
+                [component(130, 25.0 - frame_index)],
+                frame_index * 0.1,
+            )
+
+        result = TRACKING.select_minimum_ttc(
+            tracker.risk_tracks(tracks),
+            ground_confidence=1.0,
+            minimum_track_confidence=0.0,
+            maximum_depth_m=20.0,
+        )
+
+        self.assertTrue(math.isinf(result[0]))
 
 
 if __name__ == "__main__":

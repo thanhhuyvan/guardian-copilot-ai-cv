@@ -108,7 +108,7 @@ class PipelineFrame:
 
 
 class GuardianTtcPipeline:
-    """Unchanged Stage 2A track-p35 post-processing behind a stereo adapter."""
+    """Guardian track-p35 post-processing behind a stereo adapter."""
 
     def __init__(
         self,
@@ -116,18 +116,29 @@ class GuardianTtcPipeline:
         image_shape: tuple[int, int],
         focal_length_px: float,
         baseline_m: float,
+        ttc_policy: str = "baseline",
     ) -> None:
+        if ttc_policy not in {"baseline", "guarded"}:
+            raise ValueError(f"unknown TTC policy: {ttc_policy}")
         self.backend = backend
         self.image_shape = image_shape
         self.focal_length_px = focal_length_px
         self.baseline_m = baseline_m
+        self.ttc_policy = ttc_policy
+        corridor_top = 0.10 if ttc_policy == "guarded" else 0.16
+        corridor_bottom = 0.50 if ttc_policy == "guarded" else 0.55
         self.risk_corridor = collision_corridor_mask(
             image_shape,
-            top_width_fraction=0.16,
-            bottom_width_fraction=0.55,
+            top_width_fraction=corridor_top,
+            bottom_width_fraction=corridor_bottom,
         )
         self.tracker = ComponentTracker(
-            image_shape, depth_attribute="depth_p35_m"
+            image_shape,
+            depth_attribute="depth_p35_m",
+            risk_top_width_fraction=corridor_top,
+            risk_bottom_width_fraction=corridor_bottom,
+            minimum_bottom_fraction=0.50 if ttc_policy == "guarded" else 0.0,
+            minimum_height_fraction=0.05 if ttc_policy == "guarded" else 0.0,
         )
 
     def process(
@@ -183,8 +194,20 @@ class GuardianTtcPipeline:
         ]
         current_tracks = self.tracker.update(components, timestamp)
         risk_tracks = self.tracker.risk_tracks(current_tracks)
+        selection_options = (
+            {
+                "minimum_track_confidence": 0.75,
+                "maximum_closing_speed_mps": 20.0,
+                "maximum_depth_m": 20.0,
+                "maximum_motion_residual_m": 0.8,
+            }
+            if self.ttc_policy == "guarded"
+            else {}
+        )
         predicted_ttc, _, _, _ = select_minimum_ttc(
-            risk_tracks, ground_confidence
+            risk_tracks,
+            ground_confidence,
+            **selection_options,
         )
         tracking_ms = (time.perf_counter() - started) * 1000.0
         return PipelineFrame(
@@ -808,7 +831,11 @@ def _load_dataset_class(starter_root: Path) -> Any:
     return TripDataset
 
 
-def _trip_context(dataset: Any, backend: StereoBackend) -> GuardianTtcPipeline:
+def _trip_context(
+    dataset: Any,
+    backend: StereoBackend,
+    ttc_policy: str = "baseline",
+) -> GuardianTtcPipeline:
     calibration = dataset.load_calibration()
     image_shape = (
         int(calibration["image_height"]),
@@ -819,6 +846,7 @@ def _trip_context(dataset: Any, backend: StereoBackend) -> GuardianTtcPipeline:
         image_shape,
         float(calibration["K_left"][0][0]),
         float(calibration["baseline_m"]),
+        ttc_policy,
     )
 
 
@@ -828,6 +856,7 @@ def warm_up_backend(
     practice_root: Path,
     trip_id: str,
     frame_count: int,
+    ttc_policy: str = "baseline",
 ) -> None:
     if frame_count == 0:
         return
@@ -835,7 +864,7 @@ def warm_up_backend(
     frames = list(dataset.iter_frames())
     if not frames:
         raise BackendConfigurationError(f"trip {trip_id} has no frames")
-    pipeline = _trip_context(dataset, backend)
+    pipeline = _trip_context(dataset, backend, ttc_policy)
     for index in range(frame_count):
         frame = frames[index % len(frames)]
         left = dataset.load_left(frame.frame_id)
@@ -1544,6 +1573,7 @@ def benchmark(
     latency_target_ms: float,
     progress_every: int,
     gpu_device_id: int,
+    ttc_policy: str = "baseline",
 ) -> dict[str, Any]:
     trip_dataset_class = _load_dataset_class(starter_root)
     missing_trips = [
@@ -1587,6 +1617,7 @@ def benchmark(
         practice_root,
         trips[0],
         warmup_frames,
+        ttc_policy,
     )
     if gpu_sampler is not None:
         gpu_sampler.start()
@@ -1610,7 +1641,7 @@ def benchmark(
                 )
             if max_frames_per_trip is not None:
                 frames = frames[:max_frames_per_trip]
-            pipeline = _trip_context(dataset, backend)
+            pipeline = _trip_context(dataset, backend, ttc_policy)
             prediction_rows = []
 
             for frame_index, frame in enumerate(frames):
@@ -1758,6 +1789,7 @@ def benchmark(
         "input_shape": list(observed_input_shape or ()),
         "backend_metadata": observed_backend_metadata or {},
         "configuration": {
+            "ttc_policy": ttc_policy,
             "trips": list(trips),
             "repeats": repeats,
             "warmup_frames": warmup_frames,
@@ -2060,6 +2092,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--trips", nargs="+", default=list(TRIPS))
     parser.add_argument("--max-frames-per-trip", type=int)
     parser.add_argument("--skip-evaluation", action="store_true")
+    parser.add_argument(
+        "--ttc-policy",
+        choices=("baseline", "guarded"),
+        default="guarded",
+        help=(
+            "Post-processing policy. 'guarded' suppresses implausible "
+            "road-surface tracks and is the Phase 3 accuracy candidate."
+        ),
+    )
     parser.add_argument(
         "--latency-target-ms",
         type=float,
@@ -2400,6 +2441,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             latency_target_ms=args.latency_target_ms,
             progress_every=args.progress_every,
             gpu_device_id=args.device_id,
+            ttc_policy=args.ttc_policy,
         )
     except BackendConfigurationError as error:
         parser.error(str(error))

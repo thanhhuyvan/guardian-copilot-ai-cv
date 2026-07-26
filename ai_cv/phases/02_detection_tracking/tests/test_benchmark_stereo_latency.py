@@ -747,6 +747,24 @@ class CliContractTests(unittest.TestCase):
         self.assertEqual(args.opencv_threads, 6)
         self.assertEqual(args.stereo_workers, 1)
         self.assertEqual(args.stereo_roi_top, 0)
+        self.assertEqual(args.ttc_policy, "guarded")
+
+    def test_baseline_ttc_policy_remains_available(self) -> None:
+        parser = BENCHMARK.build_parser()
+        args = parser.parse_args(
+            [
+                "--backend",
+                "sgbm",
+                "--precision",
+                "fp32",
+                "--repeats",
+                "5",
+                "--ttc-policy",
+                "baseline",
+            ]
+        )
+
+        self.assertEqual(args.ttc_policy, "baseline")
 
     def test_sgbm_roi_candidate_is_explicit_in_cli(self) -> None:
         parser = BENCHMARK.build_parser()

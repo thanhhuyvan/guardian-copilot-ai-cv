@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import importlib.util
+import math
 import sys
 import tempfile
 import unittest
+from collections import deque
 from dataclasses import asdict
 from pathlib import Path
 
@@ -85,6 +87,53 @@ class RuntimeAggregationTests(unittest.TestCase):
             self.assertIn("lr_consistency_ms", report)
             self.assertIn("stereo_pair_ms", report)
             self.assertTrue((output_root / "runtime_summary.json").is_file())
+
+
+class SelectedTrackDiagnosticTests(unittest.TestCase):
+    def test_missing_track_has_explicit_empty_diagnostics(self) -> None:
+        result = PIPELINE.selected_track_diagnostics(None, (360, 640))
+
+        self.assertTrue(math.isnan(result["selected_center_x_norm"]))
+        self.assertEqual(result["selected_track_hits"], 0)
+        self.assertEqual(result["selected_history_length"], 0)
+
+    def test_track_features_are_normalized_and_include_motion_fit(self) -> None:
+        observations = deque(
+            [
+                PIPELINE.TrackObservation(
+                    0.0, 12.0, 300.0, 200.0, 0.8, 0.6, 0.9, 1.0
+                ),
+                PIPELINE.TrackObservation(
+                    0.1, 11.0, 302.0, 202.0, 0.9, 0.5, 0.9, 1.0
+                ),
+                PIPELINE.TrackObservation(
+                    0.2, 10.0, 304.0, 204.0, 1.0, 0.4, 0.95, 1.0
+                ),
+            ],
+            maxlen=11,
+        )
+        track = PIPELINE.ComponentTrack(
+            track_id=4,
+            bbox=(256, 180, 384, 324),
+            observations=observations,
+            hits=3,
+            age=3,
+        )
+
+        result = PIPELINE.selected_track_diagnostics(track, (360, 640))
+
+        self.assertAlmostEqual(result["selected_center_x_norm"], 0.5)
+        self.assertAlmostEqual(result["selected_bottom_y_norm"], 0.9)
+        self.assertAlmostEqual(result["selected_width_norm"], 0.2)
+        self.assertAlmostEqual(result["selected_height_norm"], 0.4)
+        self.assertEqual(result["selected_track_hits"], 3)
+        self.assertEqual(result["selected_history_length"], 3)
+        self.assertAlmostEqual(result["selected_motion_residual_m"], 0.0)
+        self.assertAlmostEqual(result["selected_observation_quality"], 1.0)
+        self.assertAlmostEqual(result["selected_depth_mad_m"], 0.4)
+        self.assertAlmostEqual(result["selected_depth_mad_ratio"], 0.04)
+        self.assertAlmostEqual(result["selected_lr_support"], 0.95)
+        self.assertAlmostEqual(result["selected_corridor_overlap"], 1.0)
 
 
 if __name__ == "__main__":

@@ -34,11 +34,22 @@ from classical_geometry import (
     extract_obstacle_components,
     ground_and_obstacle_masks,
 )
-from classical_tracking import ComponentTracker, select_minimum_ttc
+from classical_tracking import (
+    ComponentTrack,
+    ComponentTracker,
+    TrackObservation,
+    select_minimum_ttc,
+)
 
 
 TRIPS = [f"T0{index}-Sample" for index in range(1, 7)]
-VARIANTS = ("scene_p20", "track_p20", "track_p35", "track_median")
+VARIANTS = (
+    "scene_p20",
+    "track_p20",
+    "track_p35",
+    "track_p35_guarded",
+    "track_median",
+)
 
 
 @dataclass(frozen=True)
@@ -92,6 +103,50 @@ def component_in_risk_corridor(component, corridor: np.ndarray) -> bool:
     return bool(corridor[bottom_y, center_x])
 
 
+def selected_track_diagnostics(
+    track,
+    image_shape: tuple[int, int],
+) -> dict[str, float | int]:
+    """Return normalized spatial/history features for failure analysis."""
+    if track is None:
+        return {
+            "selected_center_x_norm": math.nan,
+            "selected_bottom_y_norm": math.nan,
+            "selected_width_norm": math.nan,
+            "selected_height_norm": math.nan,
+            "selected_track_hits": 0,
+            "selected_history_length": 0,
+            "selected_motion_residual_m": math.nan,
+            "selected_observation_quality": math.nan,
+            "selected_depth_mad_m": math.nan,
+            "selected_depth_mad_ratio": math.nan,
+            "selected_lr_support": math.nan,
+            "selected_corridor_overlap": math.nan,
+        }
+    height, width = image_shape
+    x0, y0, x1, y1 = track.bbox
+    _, _, residual = track.motion_state()
+    return {
+        "selected_center_x_norm": ((x0 + x1) / 2.0) / width,
+        "selected_bottom_y_norm": y1 / height,
+        "selected_width_norm": (x1 - x0) / width,
+        "selected_height_norm": (y1 - y0) / height,
+        "selected_track_hits": track.hits,
+        "selected_history_length": len(track.observations),
+        "selected_motion_residual_m": residual,
+        "selected_observation_quality": track.latest.quality,
+        "selected_depth_mad_m": track.latest.depth_mad_m,
+        "selected_depth_mad_ratio": (
+            track.latest.depth_mad_m / track.latest.depth_m
+            if math.isfinite(track.latest.depth_mad_m)
+            and track.latest.depth_m > 0.0
+            else math.nan
+        ),
+        "selected_lr_support": track.latest.lr_support,
+        "selected_corridor_overlap": track.latest.corridor_overlap,
+    }
+
+
 def write_csv(path: Path, rows: list[dict], fieldnames: list[str]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8", newline="") as handle:
@@ -127,6 +182,14 @@ def process_trip(
     trackers = {
         "track_p20": ComponentTracker(image_shape, depth_attribute="depth_p20_m"),
         "track_p35": ComponentTracker(image_shape, depth_attribute="depth_p35_m"),
+        "track_p35_guarded": ComponentTracker(
+            image_shape,
+            depth_attribute="depth_p35_m",
+            risk_top_width_fraction=0.10,
+            risk_bottom_width_fraction=0.50,
+            minimum_bottom_fraction=0.50,
+            minimum_height_fraction=0.05,
+        ),
         "track_median": ComponentTracker(image_shape, depth_attribute="depth_m"),
     }
     prediction_rows = {variant: [] for variant in VARIANTS}
@@ -204,13 +267,26 @@ def process_trip(
                 0.0,
                 0.0,
                 nearest_depth if nearest_depth is not None else math.nan,
+                selected_track_diagnostics(None, image_shape),
             )
         }
         for variant, tracker in trackers.items():
             current_tracks = tracker.update(components, frame.timestamp)
             risk_tracks = tracker.risk_tracks(current_tracks)
+            selection_options = (
+                {
+                    "minimum_track_confidence": 0.75,
+                    "maximum_closing_speed_mps": 20.0,
+                    "maximum_depth_m": 20.0,
+                    "maximum_motion_residual_m": 0.8,
+                }
+                if variant == "track_p35_guarded"
+                else {}
+            )
             ttc, track_id, confidence, closing_speed = select_minimum_ttc(
-                risk_tracks, ground_confidence
+                risk_tracks,
+                ground_confidence,
+                **selection_options,
             )
             predictions[variant] = ttc
             selected_track = next(
@@ -226,6 +302,7 @@ def process_trip(
                     if selected_track is not None
                     else math.nan
                 ),
+                selected_track_diagnostics(selected_track, image_shape),
             )
         tracking_ms = (time.perf_counter() - started) * 1000.0
         compute_finished = time.perf_counter()
@@ -249,7 +326,13 @@ def process_trip(
                     "ground_truth_ttc": gt_value,
                 }
             )
-            track_id, confidence, closing_speed, depth_m = selected[variant]
+            (
+                track_id,
+                confidence,
+                closing_speed,
+                depth_m,
+                track_diagnostics,
+            ) = selected[variant]
             diagnostic_rows.append(
                 {
                     "frame_id": frame.frame_id,
@@ -264,6 +347,17 @@ def process_trip(
                     ),
                     "closing_speed_mps": round(closing_speed, 4),
                     "prediction_confidence": round(confidence, 6),
+                    **{
+                        key: (
+                            ""
+                            if isinstance(value, float)
+                            and not math.isfinite(value)
+                            else round(value, 6)
+                            if isinstance(value, float)
+                            else value
+                        )
+                        for key, value in track_diagnostics.items()
+                    },
                     "predicted_ttc": (
                         "inf"
                         if not math.isfinite(prediction)

@@ -19,6 +19,9 @@ class TrackObservation:
     center_x: float
     center_y: float
     quality: float
+    depth_mad_m: float = math.nan
+    lr_support: float = math.nan
+    corridor_overlap: float = math.nan
 
 
 @dataclass
@@ -46,6 +49,9 @@ class ComponentTrack:
                 center_x=component.center_x,
                 center_y=component.center_y,
                 quality=component.quality,
+                depth_mad_m=component.depth_mad_m,
+                lr_support=component.lr_support,
+                corridor_overlap=component.corridor_overlap,
             )
         )
         self.hits += 1
@@ -135,16 +141,22 @@ class ComponentTracker:
         *,
         depth_attribute: str = "depth_p20_m",
         maximum_missed: int = 3,
+        risk_top_width_fraction: float = 0.16,
+        risk_bottom_width_fraction: float = 0.55,
+        minimum_bottom_fraction: float = 0.0,
+        minimum_height_fraction: float = 0.0,
     ) -> None:
         self.image_shape = image_shape
         self.depth_attribute = depth_attribute
         self.maximum_missed = maximum_missed
+        self.minimum_bottom_fraction = minimum_bottom_fraction
+        self.minimum_height_fraction = minimum_height_fraction
         self.tracks: dict[int, ComponentTrack] = {}
         self.next_track_id = 1
         self._risk_corridor = collision_corridor_mask(
             self.image_shape,
-            top_width_fraction=0.16,
-            bottom_width_fraction=0.55,
+            top_width_fraction=risk_top_width_fraction,
+            bottom_width_fraction=risk_bottom_width_fraction,
         )
         self._risk_corridor.flags.writeable = False
 
@@ -233,6 +245,10 @@ class ComponentTracker:
             if not track.confirmed:
                 continue
             x0, y0, x1, y1 = track.bbox
+            if y1 / height < self.minimum_bottom_fraction:
+                continue
+            if (y1 - y0) / height < self.minimum_height_fraction:
+                continue
             center_x = int(np.clip((x0 + x1) / 2, 0, width - 1))
             bottom_y = int(np.clip(y1 - 1, 0, height - 1))
             if self._risk_corridor[bottom_y, center_x]:
@@ -246,14 +262,20 @@ def select_minimum_ttc(
     *,
     minimum_track_confidence: float = 0.55,
     maximum_closing_speed_mps: float = 40.0,
+    maximum_depth_m: float = math.inf,
+    maximum_motion_residual_m: float = math.inf,
 ) -> tuple[float, int | None, float, float]:
     best = (math.inf, None, 0.0, 0.0)
     for track in tracks:
-        closing_speed, ttc, _ = track.motion_state()
+        closing_speed, ttc, residual = track.motion_state()
         confidence = track.confidence(ground_confidence)
         if confidence < minimum_track_confidence:
             continue
         if closing_speed > maximum_closing_speed_mps:
+            continue
+        if track.latest.depth_m > maximum_depth_m:
+            continue
+        if residual > maximum_motion_residual_m:
             continue
         if ttc < best[0]:
             best = (ttc, track.track_id, confidence, closing_speed)
