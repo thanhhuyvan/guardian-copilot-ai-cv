@@ -194,6 +194,7 @@ def process_trip(
     }
     prediction_rows = {variant: [] for variant in VARIANTS}
     diagnostic_rows = []
+    candidate_rows = []
     runtime_rows = []
 
     for index, frame in enumerate(dataset.iter_frames()):
@@ -272,6 +273,40 @@ def process_trip(
         }
         for variant, tracker in trackers.items():
             current_tracks = tracker.update(components, frame.timestamp)
+            if variant == "track_p35":
+                for track in current_tracks:
+                    if not track.confirmed:
+                        continue
+                    closing_speed, candidate_ttc, residual = track.motion_state()
+                    candidate_rows.append(
+                        {
+                            "frame_id": frame.frame_id,
+                            "timestamp": round(frame.timestamp, 3),
+                            "track_id": track.track_id,
+                            "ground_truth_ttc": (
+                                "inf"
+                                if not math.isfinite(frame.min_ttc)
+                                else round(frame.min_ttc, 3)
+                            ),
+                            "ground_confidence": round(ground_confidence, 6),
+                            "depth_m": round(track.latest.depth_m, 6),
+                            "closing_speed_mps": round(closing_speed, 6),
+                            "candidate_ttc": (
+                                "inf"
+                                if not math.isfinite(candidate_ttc)
+                                else round(candidate_ttc, 6)
+                            ),
+                            "motion_residual_m": (
+                                ""
+                                if not math.isfinite(residual)
+                                else round(residual, 6)
+                            ),
+                            "confidence": round(
+                                track.confidence(ground_confidence), 6
+                            ),
+                            **selected_track_diagnostics(track, image_shape),
+                        }
+                    )
             risk_tracks = tracker.risk_tracks(current_tracks)
             selection_options = (
                 {
@@ -401,6 +436,11 @@ def process_trip(
         output_root / "diagnostics" / f"{trip_id}.csv",
         diagnostic_rows,
         list(diagnostic_rows[0].keys()),
+    )
+    write_csv(
+        output_root / "track_candidates" / f"{trip_id}.csv",
+        candidate_rows,
+        list(candidate_rows[0].keys()),
     )
     write_csv(
         output_root / "runtime" / f"{trip_id}.csv",
