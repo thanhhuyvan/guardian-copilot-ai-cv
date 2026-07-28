@@ -16,6 +16,7 @@ for path in (SRC, PHASE02_SRC):
 from classical_geometry import collision_corridor_mask
 from detector_interfaces import Detection
 from evaluate_detector_owned_ttc import (
+    _apply_suppressed_ttc_floor,
     _prefixed_evidence,
     detection_component,
     detection_evidence_json,
@@ -53,6 +54,15 @@ def test_prefixed_evidence_keeps_detector_and_classical_fields_distinct() -> Non
         "classical_track_id": 7,
         "classical_quality": 0.8,
     }
+
+
+def test_suppressed_ttc_floor_keeps_non_danger_output_finite() -> None:
+    assert _apply_suppressed_ttc_floor(
+        raw_ttc=1.2, gated_ttc=float("inf"), floor_ttc=2.0
+    ) == (2.0, True)
+    assert _apply_suppressed_ttc_floor(
+        raw_ttc=1.2, gated_ttc=1.5, floor_ttc=2.0
+    ) == (1.5, False)
 
 
 def test_detection_component_uses_nearer_supported_disparity_mode() -> None:

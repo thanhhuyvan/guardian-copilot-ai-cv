@@ -323,6 +323,22 @@ def _ttc_text(value: float) -> str:
     return "inf" if not math.isfinite(value) else f"{value:.6f}"
 
 
+def _apply_suppressed_ttc_floor(
+    *,
+    raw_ttc: float,
+    gated_ttc: float,
+    floor_ttc: float | None,
+) -> tuple[float, bool]:
+    """Keep a finite near-threshold estimate when a gate suppresses danger."""
+    if (
+        floor_ttc is not None
+        and raw_ttc < 2.0
+        and not gated_ttc < 2.0
+    ):
+        return floor_ttc, True
+    return gated_ttc, False
+
+
 def _prediction_equal(first: float, second: float) -> bool:
     if math.isinf(first) and math.isinf(second):
         return True
@@ -367,6 +383,14 @@ def run(
         or args.experimental_low_ego_speed_max_mps < 0.0
     ):
         raise ValueError("experimental low ego speed must be finite and >= 0")
+    if (
+        args.experimental_low_ego_suppressed_ttc is not None
+        and (
+            not math.isfinite(args.experimental_low_ego_suppressed_ttc)
+            or args.experimental_low_ego_suppressed_ttc < 2.0
+        )
+    ):
+        raise ValueError("experimental low-ego suppressed TTC must be finite and >= 2")
     starter_root = args.starter_root.resolve()
     if str(starter_root) not in sys.path:
         sys.path.insert(0, str(starter_root))
@@ -433,6 +457,9 @@ def run(
             "experimental_low_ego_speed_max_mps": (
                 args.experimental_low_ego_speed_max_mps
             ),
+            "experimental_low_ego_suppressed_ttc": (
+                args.experimental_low_ego_suppressed_ttc
+            ),
         },
         "hardware_independent_workload": {
             "detector": detector_workload,
@@ -466,6 +493,9 @@ def run(
                 ),
                 "experimental_low_ego_speed_max_mps": (
                     args.experimental_low_ego_speed_max_mps
+                ),
+                "experimental_low_ego_suppressed_ttc": (
+                    args.experimental_low_ego_suppressed_ttc
                 ),
             },
             "confidence_temporal": {
@@ -737,6 +767,22 @@ def run(
                             if use_low_ego_gate
                             else 0.3
                         )
+                        classical_raw_ttc = math.inf
+                        classical_floor_applied = False
+                        if (
+                            use_low_ego_gate
+                            and args.experimental_low_ego_suppressed_ttc
+                            is not None
+                        ):
+                            classical_raw_ttc, _, _, _ = select_minimum_ttc(
+                                classical_risk_tracks,
+                                ground_confidence,
+                                minimum_track_confidence=0.75,
+                                minimum_closing_speed_mps=0.3,
+                                maximum_closing_speed_mps=20.0,
+                                maximum_depth_m=20.0,
+                                maximum_motion_residual_m=0.8,
+                            )
                         (
                             classical_ttc,
                             classical_track_id,
@@ -752,6 +798,13 @@ def run(
                             maximum_closing_speed_mps=20.0,
                             maximum_depth_m=20.0,
                             maximum_motion_residual_m=0.8,
+                        )
+                        classical_ttc, classical_floor_applied = (
+                            _apply_suppressed_ttc_floor(
+                                raw_ttc=float(classical_raw_ttc),
+                                gated_ttc=float(classical_ttc),
+                                floor_ttc=args.experimental_low_ego_suppressed_ttc,
+                            )
                         )
                         detector_only_danger = (
                             capped_ttc < 2.0 and not classical_ttc < 2.0
@@ -773,7 +826,11 @@ def run(
                             union_confidence = float(classical_confidence)
                             union_closing = float(classical_closing)
                             union_tracks = classical_risk_tracks
-                            union_source = "classical"
+                            union_source = (
+                                "classical_low_ego_ttc_floor"
+                                if classical_floor_applied
+                                else "classical"
+                            )
                         risk_frame = risk_machine.update(
                             int(frame.frame_id),
                             float(frame.timestamp),
@@ -1194,6 +1251,14 @@ def parse_args() -> argparse.Namespace:
         help=(
             "Apply experimental classical speed gate only when ego speed is "
             "at or below this m/s value. Zero disables condition."
+        ),
+    )
+    parser.add_argument(
+        "--experimental-low-ego-suppressed-ttc",
+        type=float,
+        help=(
+            "Finite non-danger TTC emitted when low-ego speed gate suppresses "
+            "a raw classical danger candidate; omit to emit inf."
         ),
     )
     parser.add_argument(
