@@ -53,10 +53,148 @@ class ObstacleComponent:
     lr_support: float
     corridor_overlap: float
     quality: float
+    object_depth_m: float = math.nan
+    object_depth_mad_m: float = math.nan
+    object_depth_confidence: float = 0.0
+    object_depth_mode_count: int = 0
 
     @property
     def bbox(self) -> tuple[int, int, int, int]:
         return self.x, self.y, self.x + self.width, self.y + self.height
+
+
+@dataclass(frozen=True)
+class ObjectDepthEstimate:
+    """Robust depth estimate from the inner support of one obstacle ROI."""
+
+    depth_m: float
+    depth_mad_m: float
+    confidence: float
+    mode_count: int
+
+
+def estimate_object_depth(
+    disparity_roi: np.ndarray,
+    evidence_roi: np.ndarray,
+    lr_consistent_roi: np.ndarray,
+    focal_length_px: float,
+    baseline_m: float,
+    *,
+    inner_width_fraction: float = 0.64,
+    inner_height_fraction: float = 0.76,
+    disparity_bin_px: float = 0.5,
+) -> ObjectDepthEstimate | None:
+    """Estimate foreground depth from a component's inner, disparity-modal ROI.
+
+    The inner crop reduces boundary/background contamination. Up to two strong
+    disparity modes are retained; the nearer significant mode is selected so a
+    broad component containing road/background support does not pull depth away
+    from the foreground obstacle.
+    """
+    if disparity_roi.shape != evidence_roi.shape:
+        raise ValueError("disparity and evidence ROI shapes must match")
+    if disparity_roi.shape != lr_consistent_roi.shape:
+        raise ValueError("LR-consistency ROI shape must match disparity")
+    height, width = disparity_roi.shape
+    if height < 3 or width < 3:
+        return None
+
+    keep_width = int(round(width * inner_width_fraction))
+    keep_height = int(round(height * inner_height_fraction))
+    keep_width = min(width, max(3, keep_width))
+    keep_height = min(height, max(3, keep_height))
+    x0 = (width - keep_width) // 2
+    x1 = x0 + keep_width
+    y0 = max(0, int(round(height * 0.10)))
+    y1 = min(height, y0 + keep_height)
+
+    core_evidence = evidence_roi[y0:y1, x0:x1]
+    core_disparity = disparity_roi[y0:y1, x0:x1]
+    core_lr = lr_consistent_roi[y0:y1, x0:x1]
+    valid = (
+        core_evidence
+        & np.isfinite(core_disparity)
+        & (core_disparity > 0.5)
+        & (core_disparity < 96.0)
+    )
+    minimum_support = max(18, int(0.03 * keep_width * keep_height))
+    if np.count_nonzero(valid) < minimum_support:
+        return None
+
+    values = core_disparity[valid].astype(np.float64)
+    bin_count = int(math.ceil(96.0 / disparity_bin_px))
+    histogram, _ = np.histogram(
+        values,
+        bins=bin_count,
+        range=(0.0, 96.0),
+    )
+    smoothed = np.convolve(
+        histogram.astype(np.float64),
+        np.asarray([0.25, 0.50, 0.25]),
+        mode="same",
+    )
+    local_peaks = np.flatnonzero(
+        (smoothed >= np.roll(smoothed, 1))
+        & (smoothed >= np.roll(smoothed, -1))
+    )
+    local_peaks = local_peaks[(local_peaks > 0) & (local_peaks < bin_count - 1)]
+    if local_peaks.size == 0:
+        return None
+
+    peak_floor = max(4.0, 0.18 * float(np.max(smoothed)))
+    ranked = sorted(
+        (
+            (float(smoothed[index]), int(index))
+            for index in local_peaks
+            if smoothed[index] >= peak_floor
+        ),
+        reverse=True,
+    )
+    selected_peaks: list[int] = []
+    minimum_separation_bins = max(2, int(round(2.0 / disparity_bin_px)))
+    for _, peak in ranked:
+        if all(
+            abs(peak - existing) >= minimum_separation_bins
+            for existing in selected_peaks
+        ):
+            selected_peaks.append(peak)
+        if len(selected_peaks) == 2:
+            break
+    if not selected_peaks:
+        return None
+
+    # Higher disparity is the nearer surface. Require local support around the
+    # selected mode so a single noisy maximum cannot become object depth.
+    selected_peak = max(selected_peaks)
+    center_disparity = (selected_peak + 0.5) * disparity_bin_px
+    mode_mask = np.abs(values - center_disparity) <= 1.25
+    mode_values = values[mode_mask]
+    if mode_values.size < minimum_support // 2:
+        return None
+
+    disparities = mode_values
+    depths = focal_length_px * baseline_m / disparities
+    depths = depths[(depths >= 1.5) & (depths <= 80.0)]
+    if depths.size < minimum_support // 2:
+        return None
+    depth_m = float(np.median(depths))
+    depth_mad = float(np.median(np.abs(depths - depth_m)))
+    mode_support = float(mode_values.size / values.size)
+    lr_support = float(np.count_nonzero(core_lr[valid]) / values.size)
+    dispersion = math.exp(-depth_mad / max(0.25, depth_m * 0.08))
+    confidence = float(
+        np.clip(
+            0.45 * mode_support + 0.30 * lr_support + 0.25 * dispersion,
+            0.0,
+            1.0,
+        )
+    )
+    return ObjectDepthEstimate(
+        depth_m=depth_m,
+        depth_mad_m=depth_mad,
+        confidence=confidence,
+        mode_count=len(selected_peaks),
+    )
 
 
 def v_disparity_histogram(
@@ -276,6 +414,7 @@ def extract_obstacle_components(
     *,
     minimum_area: int = 90,
     minimum_height: int = 12,
+    compute_object_depth: bool = False,
 ) -> tuple[list[ObstacleComponent], np.ndarray, np.ndarray]:
     corridor = _cached_collision_corridor_mask(
         disparity.shape,
@@ -361,6 +500,17 @@ def extract_obstacle_components(
             + 0.20 * corridor_overlap
             + 0.15 * dispersion_score
         )
+        object_depth = (
+            estimate_object_depth(
+                disparity[y:y1, x:x1],
+                evidence_region,
+                lr_consistent[y:y1, x:x1],
+                focal_length_px,
+                baseline_m,
+            )
+            if compute_object_depth
+            else None
+        )
         components.append(
             ObstacleComponent(
                 component_id=label,
@@ -379,6 +529,26 @@ def extract_obstacle_components(
                 lr_support=lr_support,
                 corridor_overlap=corridor_overlap,
                 quality=quality,
+                object_depth_m=(
+                    object_depth.depth_m
+                    if object_depth is not None
+                    else depth_p35
+                ),
+                object_depth_mad_m=(
+                    object_depth.depth_mad_m
+                    if object_depth is not None
+                    else depth_mad
+                ),
+                object_depth_confidence=(
+                    object_depth.confidence
+                    if object_depth is not None
+                    else 0.0
+                ),
+                object_depth_mode_count=(
+                    object_depth.mode_count
+                    if object_depth is not None
+                    else 0
+                ),
             )
         )
 

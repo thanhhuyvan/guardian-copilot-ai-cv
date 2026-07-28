@@ -45,6 +45,10 @@ def component(
         lr_support=0.9,
         corridor_overlap=1.0,
         quality=0.9,
+        object_depth_m=depth,
+        object_depth_mad_m=0.1,
+        object_depth_confidence=0.9,
+        object_depth_mode_count=1,
     )
 
 
@@ -168,6 +172,46 @@ class TrackingTests(unittest.TestCase):
         )
 
         self.assertTrue(math.isinf(result[0]))
+
+    def test_uncertainty_filter_tracks_linear_closing_motion(self) -> None:
+        tracker = TRACKING.ComponentTracker(
+            (200, 300),
+            depth_attribute="object_depth_m",
+            use_uncertainty_filter=True,
+        )
+        for frame_index in range(20):
+            tracks = tracker.update(
+                [component(130, 15.0 - frame_index * 0.1)],
+                frame_index * 0.05,
+            )
+
+        closing_speed, ttc, residual = tracks[0].filtered_motion_state()
+
+        self.assertAlmostEqual(closing_speed, 2.0, delta=0.35)
+        self.assertAlmostEqual(ttc, 6.55, delta=1.0)
+        self.assertLess(residual, 0.5)
+
+    def test_predicted_track_survives_at_most_two_missing_frames(self) -> None:
+        tracker = TRACKING.ComponentTracker(
+            (200, 300),
+            maximum_missed=3,
+            use_uncertainty_filter=True,
+            include_predicted_tracks=True,
+        )
+        for frame_index in range(4):
+            tracks = tracker.update(
+                [component(130, 10.0 - frame_index * 0.1)],
+                frame_index * 0.05,
+            )
+        track_id = tracks[0].track_id
+
+        first_missing = tracker.update([], 0.20)
+        second_missing = tracker.update([], 0.25)
+        third_missing = tracker.update([], 0.30)
+
+        self.assertEqual(first_missing[0].track_id, track_id)
+        self.assertEqual(second_missing[0].track_id, track_id)
+        self.assertEqual(third_missing, [])
 
 
 if __name__ == "__main__":

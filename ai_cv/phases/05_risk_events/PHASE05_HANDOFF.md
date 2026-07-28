@@ -1,12 +1,13 @@
 # Phase 05 handoff — confidence, risk state, and events
 
 Date: 2026-07-28  
-Status: **READY_TO_START**
+Status: **IN PROGRESS**
 
 ## Input candidate
 
-Use the classical `track_p35_guarded` TTC pipeline. Do not load YOLO26 in the
-Phase 05 runtime.
+Keep classical `track_p35_guarded` as the fallback. A detector-owned research
+candidate is now also available; it must not replace the fallback until
+confidence-based selection and live detector latency pass their gates.
 
 | Frozen metric | Value |
 |---|---:|
@@ -17,6 +18,11 @@ Phase 05 runtime.
 | T05 false positives | 45 |
 | Compute P95 | 54.40 ms |
 
+The detector-owned candidate improved the official six-trip macro F1 to
+`0.618` and composite to `42.4`, but T02 regressed from `0.765` to `0.375`.
+See `artifacts/DETECTOR_OWNED_TTC_ABLATION.md`. This rules out a universal
+replacement and motivates a causal confidence/fusion decision in this phase.
+
 Phase 04B's semantic comparator was rejected because its best oracle F1 was
 only 0.5745 and its full LOTO selection was infeasible.
 
@@ -24,7 +30,7 @@ only 0.5745 and its full LOTO selection was infeasible.
 
 1. Define a backend-neutral per-frame confidence/risk record containing frame
    ID, timestamp, selected track, raw and filtered TTC, confidence factors,
-   risk state, degradation state, and reason codes.
+   proposal source, risk state, degradation state, and reason codes.
 2. Implement a deterministic risk-state machine with `NORMAL`, `ATTENTIVE`,
    `HIGH_RISK`, and `UNKNOWN`.
 3. Add hysteresis and debounce without changing the frozen TTC estimator.

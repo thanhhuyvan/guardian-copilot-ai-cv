@@ -244,5 +244,61 @@ class MaskTests(unittest.TestCase):
         self.assertAlmostEqual(component.quality, reference_quality, places=15)
 
 
+class ObjectDepthTests(unittest.TestCase):
+    def test_selects_nearer_significant_inner_roi_mode(self) -> None:
+        disparity = np.full((40, 60), 8.0, dtype=np.float32)
+        disparity[:, 30:] = 16.0
+        evidence = np.ones_like(disparity, dtype=bool)
+        consistent = np.ones_like(disparity, dtype=bool)
+
+        estimate = GEOMETRY.estimate_object_depth(
+            disparity,
+            evidence,
+            consistent,
+            focal_length_px=320.0,
+            baseline_m=0.3,
+        )
+
+        self.assertIsNotNone(estimate)
+        assert estimate is not None
+        self.assertEqual(estimate.mode_count, 2)
+        self.assertAlmostEqual(estimate.depth_m, 6.0, places=2)
+        self.assertGreater(estimate.confidence, 0.6)
+
+    def test_inner_roi_ignores_boundary_disparity(self) -> None:
+        disparity = np.full((40, 60), 12.0, dtype=np.float32)
+        disparity[:, :8] = 30.0
+        disparity[:, -8:] = 30.0
+        evidence = np.ones_like(disparity, dtype=bool)
+        consistent = np.ones_like(disparity, dtype=bool)
+
+        estimate = GEOMETRY.estimate_object_depth(
+            disparity,
+            evidence,
+            consistent,
+            focal_length_px=320.0,
+            baseline_m=0.3,
+        )
+
+        self.assertIsNotNone(estimate)
+        assert estimate is not None
+        self.assertAlmostEqual(estimate.depth_m, 8.0, places=2)
+
+    def test_sparse_inner_roi_returns_none(self) -> None:
+        disparity = np.full((20, 20), np.nan, dtype=np.float32)
+        evidence = np.zeros_like(disparity, dtype=bool)
+        consistent = np.zeros_like(disparity, dtype=bool)
+
+        self.assertIsNone(
+            GEOMETRY.estimate_object_depth(
+                disparity,
+                evidence,
+                consistent,
+                focal_length_px=320.0,
+                baseline_m=0.3,
+            )
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

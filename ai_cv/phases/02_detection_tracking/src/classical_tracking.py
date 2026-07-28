@@ -34,6 +34,101 @@ class TrackObservation:
     depth_mad_m: float = math.nan
     lr_support: float = math.nan
     corridor_overlap: float = math.nan
+    depth_sigma_m: float = math.nan
+    depth_confidence: float = 0.0
+
+
+@dataclass
+class DistanceVelocityFilter:
+    """Small constant-velocity filter for causal object distance and speed."""
+
+    state: np.ndarray | None = None
+    covariance: np.ndarray | None = None
+    timestamp: float | None = None
+    innovation_ema_m: float = 0.0
+    updates: int = 0
+
+    def update(
+        self,
+        timestamp: float,
+        distance_m: float,
+        sigma_m: float,
+    ) -> None:
+        sigma_m = float(np.clip(sigma_m, 0.15, 12.0))
+        if (
+            self.state is None
+            or self.covariance is None
+            or self.timestamp is None
+            or timestamp <= self.timestamp
+            or timestamp - self.timestamp > 0.5
+        ):
+            self.state = np.asarray([distance_m, 0.0], dtype=np.float64)
+            self.covariance = np.diag(
+                [sigma_m * sigma_m, 16.0]
+            ).astype(np.float64)
+            self.timestamp = timestamp
+            self.innovation_ema_m = 0.0
+            self.updates = 1
+            return
+
+        dt = float(timestamp - self.timestamp)
+        transition = np.asarray([[1.0, dt], [0.0, 1.0]], dtype=np.float64)
+        process_acceleration = 5.0
+        process_noise = process_acceleration**2 * np.asarray(
+            [
+                [0.25 * dt**4, 0.5 * dt**3],
+                [0.5 * dt**3, dt**2],
+            ],
+            dtype=np.float64,
+        )
+        predicted_state = transition @ self.state
+        predicted_covariance = (
+            transition @ self.covariance @ transition.T + process_noise
+        )
+        measurement_variance = sigma_m * sigma_m
+        innovation = float(distance_m - predicted_state[0])
+        innovation_variance = float(
+            predicted_covariance[0, 0] + measurement_variance
+        )
+        gain = predicted_covariance[:, 0] / innovation_variance
+        self.state = predicted_state + gain * innovation
+        self.covariance = predicted_covariance - np.outer(
+            gain,
+            predicted_covariance[0, :],
+        )
+        self.covariance = 0.5 * (self.covariance + self.covariance.T)
+        self.timestamp = timestamp
+        self.innovation_ema_m = (
+            0.75 * self.innovation_ema_m + 0.25 * abs(innovation)
+            if self.updates > 1
+            else abs(innovation)
+        )
+        self.updates += 1
+
+    def motion_state(
+        self,
+        timestamp: float,
+        *,
+        missed_frames: int = 0,
+    ) -> tuple[float, float, float]:
+        if (
+            self.state is None
+            or self.covariance is None
+            or self.timestamp is None
+            or self.updates < 3
+        ):
+            return 0.0, math.inf, math.inf
+        dt = max(0.0, float(timestamp - self.timestamp))
+        distance = float(self.state[0] + dt * self.state[1])
+        closing_speed = float(-self.state[1])
+        residual = float(
+            self.innovation_ema_m
+            + 0.20 * missed_frames
+            + math.sqrt(max(0.0, self.covariance[0, 0])) * 0.10
+        )
+        if distance <= 0.0 or closing_speed <= 0.3:
+            return closing_speed, math.inf, residual
+        return closing_speed, distance / closing_speed, residual
 
 
 @dataclass
@@ -46,8 +141,17 @@ class ComponentTrack:
     hits: int = 0
     age: int = 0
     missed: int = 0
+    current_timestamp: float | None = None
+    filtered_motion: DistanceVelocityFilter | None = field(
+        default=None,
+        repr=False,
+    )
     # Semantic state — None when semantic detector is 'none' (bit-identical path).
     semantic_state: "TemporalSemanticState | None" = field(default=None, repr=False)
+
+    def enable_filtered_motion(self) -> None:
+        if self.filtered_motion is None:
+            self.filtered_motion = DistanceVelocityFilter()
 
     def enable_semantic(self) -> None:
         """Activate per-track semantic state (call once after construction when detector != none)."""
@@ -95,6 +199,28 @@ class ComponentTrack:
         depth_m: float,
     ) -> None:
         self.bbox = component.bbox
+        self.current_timestamp = timestamp
+        object_depth_mad = float(
+            getattr(component, "object_depth_mad_m", component.depth_mad_m)
+        )
+        object_depth_confidence = float(
+            getattr(component, "object_depth_confidence", 0.0)
+        )
+        depth_mad = (
+            object_depth_mad
+            if math.isfinite(object_depth_mad)
+            else component.depth_mad_m
+        )
+        confidence_scale = max(0.15, object_depth_confidence)
+        depth_sigma = float(
+            np.clip(
+                max(0.15, depth_mad)
+                * (1.35 - 0.55 * component.lr_support)
+                / math.sqrt(confidence_scale),
+                0.15,
+                12.0,
+            )
+        )
         self.observations.append(
             TrackObservation(
                 timestamp=timestamp,
@@ -102,11 +228,15 @@ class ComponentTrack:
                 center_x=component.center_x,
                 center_y=component.center_y,
                 quality=component.quality,
-                depth_mad_m=component.depth_mad_m,
+                depth_mad_m=depth_mad,
                 lr_support=component.lr_support,
                 corridor_overlap=component.corridor_overlap,
+                depth_sigma_m=depth_sigma,
+                depth_confidence=object_depth_confidence,
             )
         )
+        if self.filtered_motion is not None:
+            self.filtered_motion.update(timestamp, depth_m, depth_sigma)
         self.hits += 1
         self.age += 1
         self.missed = 0
@@ -147,10 +277,31 @@ class ComponentTrack:
             return closing_speed, math.inf, residual
         return closing_speed, float(depths[-1] / closing_speed), residual
 
-    def confidence(self, ground_confidence: float) -> float:
+    def filtered_motion_state(self) -> tuple[float, float, float]:
+        if self.filtered_motion is None or not self.observations:
+            return self.motion_state()
+        return self.filtered_motion.motion_state(
+            (
+                self.current_timestamp
+                if self.current_timestamp is not None
+                else self.latest.timestamp
+            ),
+            missed_frames=self.missed,
+        )
+
+    def confidence(
+        self,
+        ground_confidence: float,
+        *,
+        use_filtered_motion: bool = False,
+    ) -> float:
         if not self.observations:
             return 0.0
-        closing_speed, _, residual = self.motion_state()
+        closing_speed, _, residual = (
+            self.filtered_motion_state()
+            if use_filtered_motion
+            else self.motion_state()
+        )
         history_score = min(1.0, len(self.observations) / 7.0)
         observation_score = float(
             np.mean([observation.quality for observation in self.observations])
@@ -162,13 +313,27 @@ class ComponentTrack:
             else 0.0
         )
         motion_score = 1.0 if closing_speed > 0.3 else 0.5
-        return float(
+        base_confidence = float(
             0.25 * history_score
             + 0.30 * observation_score
             + 0.20 * residual_score
             + 0.15 * ground_confidence
             + 0.10 * motion_score
         )
+        if use_filtered_motion:
+            depth_confidence = float(
+                np.mean(
+                    [
+                        observation.depth_confidence
+                        for observation in self.observations
+                    ]
+                )
+            )
+            base_confidence = (
+                0.80 * base_confidence + 0.20 * depth_confidence
+            )
+            base_confidence *= 0.82**self.missed
+        return float(base_confidence)
 
 
 def bbox_iou(
@@ -202,6 +367,8 @@ class ComponentTracker:
         semantic_score_threshold: float | None = None,
         semantic_max_misses: int = 3,
         semantic_fallback_depth_m: float = 5.0,
+        use_uncertainty_filter: bool = False,
+        include_predicted_tracks: bool = False,
     ) -> None:
         self.image_shape = image_shape
         self.depth_attribute = depth_attribute
@@ -215,6 +382,8 @@ class ComponentTracker:
         self._semantic_score_threshold = semantic_score_threshold or 0.25
         self._semantic_max_misses = semantic_max_misses
         self._semantic_fallback_depth_m = semantic_fallback_depth_m
+        self.use_uncertainty_filter = use_uncertainty_filter
+        self.include_predicted_tracks = include_predicted_tracks
         self.tracks: dict[int, ComponentTrack] = {}
         self.next_track_id = 1
         self._risk_corridor = collision_corridor_mask(
@@ -225,7 +394,10 @@ class ComponentTracker:
         self._risk_corridor.flags.writeable = False
 
     def _depth(self, component: ObstacleComponent) -> float:
-        return float(getattr(component, self.depth_attribute))
+        depth = float(getattr(component, self.depth_attribute))
+        if not math.isfinite(depth):
+            return float(component.depth_p35_m)
+        return depth
 
     def _association_cost(
         self, track: ComponentTrack, component: ObstacleComponent
@@ -295,6 +467,7 @@ class ComponentTracker:
             if track_id not in matched_tracks:
                 track.age += 1
                 track.missed += 1
+                track.current_timestamp = timestamp
             if track.missed > self.maximum_missed:
                 del self.tracks[track_id]
 
@@ -305,6 +478,8 @@ class ComponentTracker:
                 track_id=self.next_track_id,
                 bbox=component.bbox,
             )
+            if self.use_uncertainty_filter:
+                track.enable_filtered_motion()
             track.update(component, timestamp, self._depth(component))
             if self._semantic_enabled:
                 track.enable_semantic()
@@ -327,7 +502,11 @@ class ComponentTracker:
         return [
             track
             for track in self.tracks.values()
-            if track.missed == 0
+            if (
+                track.missed <= min(2, self.maximum_missed)
+                if self.include_predicted_tracks
+                else track.missed == 0
+            )
         ]
 
     def reset(self) -> None:
@@ -372,11 +551,19 @@ def select_minimum_ttc(
     semantic_score_threshold: float = 0.25,
     semantic_max_misses: int = 3,
     semantic_fallback_depth_m: float = 5.0,
+    use_filtered_motion: bool = False,
 ) -> tuple[float, int | None, float, float]:
     best = (math.inf, None, 0.0, 0.0)
     for track in tracks:
-        closing_speed, ttc, residual = track.motion_state()
-        confidence = track.confidence(ground_confidence)
+        closing_speed, ttc, residual = (
+            track.filtered_motion_state()
+            if use_filtered_motion
+            else track.motion_state()
+        )
+        confidence = track.confidence(
+            ground_confidence,
+            use_filtered_motion=use_filtered_motion,
+        )
         if confidence < minimum_track_confidence:
             continue
         if closing_speed > maximum_closing_speed_mps:

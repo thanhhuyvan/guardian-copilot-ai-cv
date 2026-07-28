@@ -10,6 +10,7 @@
 /ai_cv/outputs/videos/*
 /ai_cv/outputs/reports/*
 /ai_cv/outputs/benchmarks/*
+/ai_cv/outputs/phase05_detector_owned*/
 !/ai_cv/outputs/**/.gitkeep
 !/ai_cv/outputs/README.md
 

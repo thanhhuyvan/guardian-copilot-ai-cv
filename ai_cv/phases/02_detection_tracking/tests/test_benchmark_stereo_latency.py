@@ -766,6 +766,23 @@ class CliContractTests(unittest.TestCase):
 
         self.assertEqual(args.ttc_policy, "baseline")
 
+    def test_object_centric_ttc_policy_is_explicit(self) -> None:
+        parser = BENCHMARK.build_parser()
+        args = parser.parse_args(
+            [
+                "--backend",
+                "sgbm",
+                "--precision",
+                "fp32",
+                "--repeats",
+                "5",
+                "--ttc-policy",
+                "object-centric",
+            ]
+        )
+
+        self.assertEqual(args.ttc_policy, "object-centric")
+
     def test_sgbm_roi_candidate_is_explicit_in_cli(self) -> None:
         parser = BENCHMARK.build_parser()
         args = parser.parse_args(

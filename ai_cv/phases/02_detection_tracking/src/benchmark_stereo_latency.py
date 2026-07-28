@@ -118,15 +118,27 @@ class GuardianTtcPipeline:
         baseline_m: float,
         ttc_policy: str = "baseline",
     ) -> None:
-        if ttc_policy not in {"baseline", "guarded"}:
+        if ttc_policy not in {
+            "baseline",
+            "guarded",
+            "object-depth",
+            "filtered-motion",
+            "object-centric",
+        }:
             raise ValueError(f"unknown TTC policy: {ttc_policy}")
         self.backend = backend
         self.image_shape = image_shape
         self.focal_length_px = focal_length_px
         self.baseline_m = baseline_m
         self.ttc_policy = ttc_policy
-        corridor_top = 0.10 if ttc_policy == "guarded" else 0.16
-        corridor_bottom = 0.50 if ttc_policy == "guarded" else 0.55
+        guarded_policy = ttc_policy != "baseline"
+        uses_object_depth = ttc_policy in {"object-depth", "object-centric"}
+        uses_filtered_motion = ttc_policy in {
+            "filtered-motion",
+            "object-centric",
+        }
+        corridor_top = 0.10 if guarded_policy else 0.16
+        corridor_bottom = 0.50 if guarded_policy else 0.55
         self.risk_corridor = collision_corridor_mask(
             image_shape,
             top_width_fraction=corridor_top,
@@ -134,11 +146,17 @@ class GuardianTtcPipeline:
         )
         self.tracker = ComponentTracker(
             image_shape,
-            depth_attribute="depth_p35_m",
+            depth_attribute=(
+                "object_depth_m"
+                if uses_object_depth
+                else "depth_p35_m"
+            ),
             risk_top_width_fraction=corridor_top,
             risk_bottom_width_fraction=corridor_bottom,
-            minimum_bottom_fraction=0.50 if ttc_policy == "guarded" else 0.0,
-            minimum_height_fraction=0.05 if ttc_policy == "guarded" else 0.0,
+            minimum_bottom_fraction=0.50 if guarded_policy else 0.0,
+            minimum_height_fraction=0.05 if guarded_policy else 0.0,
+            use_uncertainty_filter=uses_filtered_motion,
+            include_predicted_tracks=uses_filtered_motion,
         )
 
     def process(
@@ -180,6 +198,8 @@ class GuardianTtcPipeline:
                 support_mask,
                 self.focal_length_px,
                 self.baseline_m,
+                compute_object_depth=self.ttc_policy
+                in {"object-depth", "object-centric"},
             )
         components_ms = (time.perf_counter() - started) * 1000.0
         ground_confidence = (
@@ -194,16 +214,23 @@ class GuardianTtcPipeline:
         ]
         current_tracks = self.tracker.update(components, timestamp)
         risk_tracks = self.tracker.risk_tracks(current_tracks)
-        selection_options = (
-            {
+        if self.ttc_policy in {"guarded", "object-depth"}:
+            selection_options = {
                 "minimum_track_confidence": 0.75,
                 "maximum_closing_speed_mps": 20.0,
                 "maximum_depth_m": 20.0,
                 "maximum_motion_residual_m": 0.8,
             }
-            if self.ttc_policy == "guarded"
-            else {}
-        )
+        elif self.ttc_policy in {"filtered-motion", "object-centric"}:
+            selection_options = {
+                "minimum_track_confidence": 0.68,
+                "maximum_closing_speed_mps": 20.0,
+                "maximum_depth_m": 20.0,
+                "maximum_motion_residual_m": 1.2,
+                "use_filtered_motion": True,
+            }
+        else:
+            selection_options = {}
         predicted_ttc, _, _, _ = select_minimum_ttc(
             risk_tracks,
             ground_confidence,
@@ -2094,11 +2121,21 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--skip-evaluation", action="store_true")
     parser.add_argument(
         "--ttc-policy",
-        choices=("baseline", "guarded"),
+        choices=(
+            "baseline",
+            "guarded",
+            "object-depth",
+            "filtered-motion",
+            "object-centric",
+        ),
         default="guarded",
         help=(
             "Post-processing policy. 'guarded' suppresses implausible "
-            "road-surface tracks and is the Phase 3 accuracy candidate."
+            "road-surface tracks and is the frozen Phase 3 candidate; "
+            "'object-depth' and 'filtered-motion' isolate the Phase 05A "
+            "measurement/filter ablations; "
+            "'object-centric' uses inner-ROI modal depth plus an "
+            "uncertainty-aware distance/velocity filter."
         ),
     )
     parser.add_argument(

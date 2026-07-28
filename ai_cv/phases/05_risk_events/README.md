@@ -1,12 +1,14 @@
 # Phase 05 - Confidence, Risk State and Events
 
-**Status:** READY_TO_START  
+**Status:** IN PROGRESS  
 **Depends on:** Phase 04
 
-Phase 04B's YOLO26 research comparator was rejected at the accuracy gate. Phase
-05 therefore starts from the classical guarded TTC candidate (`macro F1
-0.5634`, composite `39.71`, compute P95 `54.40 ms`) without a YOLO runtime
-dependency.
+Phase 05 starts from the classical guarded TTC candidate (`macro F1 0.5634`,
+composite `39.71`, compute P95 `54.40 ms`) as its safe fallback. A new
+detector-owned depth/TTC ablation reaches macro F1 `0.618` and composite
+`42.4`, but is not yet the default because T02 regresses and live YOLO latency
+has not been measured. See
+[`artifacts/DETECTOR_OWNED_TTC_ABLATION.md`](artifacts/DETECTOR_OWNED_TTC_ABLATION.md).
 
 The research basis and fixed first ablation are documented in
 [`notes/PAPER_RESEARCH.md`](notes/PAPER_RESEARCH.md).
