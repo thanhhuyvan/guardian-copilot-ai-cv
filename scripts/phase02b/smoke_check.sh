@@ -215,6 +215,9 @@ import sys
 
 import numpy as np
 import onnx
+# Load PyTorch first so its CUDA 12/cuDNN 9 wheel libraries are loaded before
+# ONNX Runtime dynamically loads its CUDA execution provider.
+import torch
 import onnxruntime as ort
 from onnx import TensorProto, helper
 
