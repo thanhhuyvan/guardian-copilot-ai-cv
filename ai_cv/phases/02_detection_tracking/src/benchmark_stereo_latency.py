@@ -40,7 +40,7 @@ import subprocess
 import sys
 import threading
 import time
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
@@ -117,6 +117,7 @@ class GuardianTtcPipeline:
         focal_length_px: float,
         baseline_m: float,
         ttc_policy: str = "baseline",
+        disparity_scale: float = 1.0,
     ) -> None:
         if ttc_policy not in {
             "baseline",
@@ -131,6 +132,9 @@ class GuardianTtcPipeline:
         self.focal_length_px = focal_length_px
         self.baseline_m = baseline_m
         self.ttc_policy = ttc_policy
+        if not math.isfinite(disparity_scale) or disparity_scale <= 0:
+            raise ValueError("disparity_scale must be finite and positive")
+        self.disparity_scale = float(disparity_scale)
         guarded_policy = ttc_policy != "baseline"
         uses_object_depth = ttc_policy in {"object-depth", "object-centric"}
         uses_filtered_motion = ttc_policy in {
@@ -169,6 +173,20 @@ class GuardianTtcPipeline:
         stereo_started = time.perf_counter()
         stereo = self.backend.infer(left_bgr, right_bgr)
         stereo_ms = (time.perf_counter() - stereo_started) * 1000.0
+        if self.disparity_scale != 1.0:
+            # The post-processing thresholds are expressed in Stage 2A/SGBM
+            # pixel-disparity units.  This deliberately scales only the
+            # learned map into that coordinate system; it is an experimental
+            # calibration, not a model conversion or an accepted deployment
+            # configuration.
+            stereo = replace(
+                stereo,
+                disparity_px=stereo.disparity_px * self.disparity_scale,
+                metadata={
+                    **stereo.metadata,
+                    "experimental_disparity_scale": self.disparity_scale,
+                },
+            )
         if stereo.disparity_px.shape != self.image_shape:
             raise BackendConfigurationError(
                 f"{stereo.backend} returned {stereo.disparity_px.shape}; "
@@ -862,6 +880,7 @@ def _trip_context(
     dataset: Any,
     backend: StereoBackend,
     ttc_policy: str = "baseline",
+    disparity_scale: float = 1.0,
 ) -> GuardianTtcPipeline:
     calibration = dataset.load_calibration()
     image_shape = (
@@ -874,6 +893,7 @@ def _trip_context(
         float(calibration["K_left"][0][0]),
         float(calibration["baseline_m"]),
         ttc_policy,
+        disparity_scale,
     )
 
 
@@ -884,6 +904,7 @@ def warm_up_backend(
     trip_id: str,
     frame_count: int,
     ttc_policy: str = "baseline",
+    disparity_scale: float = 1.0,
 ) -> None:
     if frame_count == 0:
         return
@@ -891,7 +912,7 @@ def warm_up_backend(
     frames = list(dataset.iter_frames())
     if not frames:
         raise BackendConfigurationError(f"trip {trip_id} has no frames")
-    pipeline = _trip_context(dataset, backend, ttc_policy)
+    pipeline = _trip_context(dataset, backend, ttc_policy, disparity_scale)
     for index in range(frame_count):
         frame = frames[index % len(frames)]
         left = dataset.load_left(frame.frame_id)
@@ -1601,6 +1622,7 @@ def benchmark(
     progress_every: int,
     gpu_device_id: int,
     ttc_policy: str = "baseline",
+    disparity_scale: float = 1.0,
 ) -> dict[str, Any]:
     trip_dataset_class = _load_dataset_class(starter_root)
     missing_trips = [
@@ -1645,6 +1667,7 @@ def benchmark(
         trips[0],
         warmup_frames,
         ttc_policy,
+        disparity_scale,
     )
     if gpu_sampler is not None:
         gpu_sampler.start()
@@ -1668,7 +1691,9 @@ def benchmark(
                 )
             if max_frames_per_trip is not None:
                 frames = frames[:max_frames_per_trip]
-            pipeline = _trip_context(dataset, backend, ttc_policy)
+            pipeline = _trip_context(
+                dataset, backend, ttc_policy, disparity_scale
+            )
             prediction_rows = []
 
             for frame_index, frame in enumerate(frames):
@@ -1817,6 +1842,7 @@ def benchmark(
         "backend_metadata": observed_backend_metadata or {},
         "configuration": {
             "ttc_policy": ttc_policy,
+            "experimental_disparity_scale": disparity_scale,
             "trips": list(trips),
             "repeats": repeats,
             "warmup_frames": warmup_frames,
@@ -2197,6 +2223,16 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument("--progress-every", type=int, default=100)
+    parser.add_argument(
+        "--experimental-disparity-scale",
+        type=float,
+        default=1.0,
+        help=(
+            "Exploratory multiplier applied to a disparity map before frozen "
+            "Guardian geometry. It is recorded in output and must be "
+            "validated with held-out trips before any deployment use."
+        ),
+    )
     return parser
 
 
@@ -2370,6 +2406,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         or args.latency_target_ms <= 0
     ):
         parser.error("--latency-target-ms must be finite and positive")
+    if (
+        not math.isfinite(args.experimental_disparity_scale)
+        or args.experimental_disparity_scale <= 0
+    ):
+        parser.error("--experimental-disparity-scale must be finite and positive")
     if args.backend != "sgbm" and args.stereo_roi_top != 0:
         parser.error("--stereo-roi-top is only supported by --backend sgbm")
     invalid_trips = sorted(set(args.trips) - set(TRIPS))
@@ -2479,6 +2520,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             progress_every=args.progress_every,
             gpu_device_id=args.device_id,
             ttc_policy=args.ttc_policy,
+            disparity_scale=args.experimental_disparity_scale,
         )
     except BackendConfigurationError as error:
         parser.error(str(error))

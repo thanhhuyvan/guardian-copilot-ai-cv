@@ -748,6 +748,18 @@ class CliContractTests(unittest.TestCase):
         self.assertEqual(args.stereo_workers, 1)
         self.assertEqual(args.stereo_roi_top, 0)
         self.assertEqual(args.ttc_policy, "guarded")
+        self.assertEqual(args.experimental_disparity_scale, 1.0)
+
+    def test_experimental_disparity_scale_is_explicit_and_positive(self) -> None:
+        parser = BENCHMARK.build_parser()
+        args = parser.parse_args(
+            [
+                "--backend", "lightstereo-pytorch", "--precision", "fp32",
+                "--repeats", "1", "--experimental-disparity-scale", "0.5",
+            ]
+        )
+
+        self.assertEqual(args.experimental_disparity_scale, 0.5)
 
     def test_baseline_ttc_policy_remains_available(self) -> None:
         parser = BENCHMARK.build_parser()
