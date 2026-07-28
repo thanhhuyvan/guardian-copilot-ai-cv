@@ -21,6 +21,7 @@ from evaluate_detector_owned_ttc import (
     detection_component,
     detection_evidence_json,
 )
+from diagnose_temporal_depth_consistency import bbox_iou as diagnostic_bbox_iou
 
 
 def test_detection_evidence_retains_raw_yolo_identity_and_box() -> None:
@@ -63,6 +64,14 @@ def test_suppressed_ttc_floor_keeps_non_danger_output_finite() -> None:
     assert _apply_suppressed_ttc_floor(
         raw_ttc=1.2, gated_ttc=1.5, floor_ttc=2.0
     ) == (1.5, False)
+
+
+def test_temporal_depth_diagnostic_bbox_iou_is_symmetric() -> None:
+    first = [0.0, 0.0, 10.0, 10.0]
+    second = [5.0, 0.0, 15.0, 10.0]
+
+    assert diagnostic_bbox_iou(first, second) == diagnostic_bbox_iou(second, first)
+    assert diagnostic_bbox_iou(first, second) == 1 / 3
 
 
 def test_detection_component_uses_nearer_supported_disparity_mode() -> None:
