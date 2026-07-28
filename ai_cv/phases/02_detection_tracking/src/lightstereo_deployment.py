@@ -806,6 +806,38 @@ def export_lightstereo_onnx(
         raise BackendConfigurationError(
             "PyTorch reported success but did not create the ONNX artifact"
         )
+    # PyTorch 2.7 traces LightStereo's interpolation path with symbolic output
+    # metadata even though this export has fixed inputs and always produces
+    # [1, 1, 384, 640].  Pin the graph's value-info to that audited, runtime
+    # shape so ONNX Runtime and TensorRT receive the static deployment contract.
+    try:
+        exported = onnx.load(str(temporary))
+        outputs = {
+            item.name: item for item in exported.graph.output
+        }
+        output_info = outputs.get(OPENSTEREO_ONNX_OUTPUT_NAME)
+        if set(outputs) != {OPENSTEREO_ONNX_OUTPUT_NAME} or output_info is None:
+            raise BackendConfigurationError(
+                "exported ONNX must expose exactly the disp_pred output"
+            )
+        dimensions = output_info.type.tensor_type.shape.dim
+        expected_output_shape = (1, 1, INPUT_HEIGHT, INPUT_WIDTH)
+        if len(dimensions) != len(expected_output_shape):
+            raise BackendConfigurationError(
+                "exported LightStereo disp_pred rank must be four; found "
+                f"{len(dimensions)}"
+            )
+        for dimension, value in zip(dimensions, expected_output_shape):
+            dimension.ClearField("dim_param")
+            dimension.dim_value = value
+        onnx.checker.check_model(exported)
+        onnx.save(exported, str(temporary))
+    except BackendConfigurationError:
+        raise
+    except Exception as error:
+        raise BackendConfigurationError(
+            f"could not pin the static LightStereo ONNX output contract: {error}"
+        ) from error
     os.replace(temporary, output)
     validate_onnx_artifact(output, onnx_module=onnx)
     manifest = write_artifact_manifest(
