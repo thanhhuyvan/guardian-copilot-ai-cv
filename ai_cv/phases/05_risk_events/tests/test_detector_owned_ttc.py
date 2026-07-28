@@ -20,6 +20,7 @@ from evaluate_detector_owned_ttc import (
     _best_road_user_detection_iou,
     _path_intersection_geometry,
     _prefixed_evidence,
+    _track_measurements_json,
     detection_component,
     detection_evidence_json,
 )
@@ -73,6 +74,22 @@ def test_classical_track_yolo_association_uses_only_road_users() -> None:
 
     assert _best_road_user_detection_iou(Track(), detections) == 0.6
     assert _best_road_user_detection_iou(None, detections) == 0.0
+
+
+def test_shadow_measurements_keep_only_latest_track_observation() -> None:
+    class Latest:
+        timestamp = 1.25
+        depth_m = 8.0
+        center_x = 300.0
+        depth_sigma_m = 0.5
+
+    class Track:
+        track_id = 4
+        latest = Latest()
+
+    assert json.loads(_track_measurements_json([Track()])) == [
+        {"track_id": 4, "timestamp": 1.25, "depth_m": 8.0, "center_x": 300.0, "depth_sigma_m": 0.5}
+    ]
 from diagnose_temporal_depth_consistency import bbox_iou as diagnostic_bbox_iou
 
 

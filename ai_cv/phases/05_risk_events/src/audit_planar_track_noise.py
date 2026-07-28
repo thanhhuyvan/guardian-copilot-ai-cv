@@ -34,8 +34,15 @@ def audit(evidence_path: Path, focal_px: float, cx_px: float) -> dict[str, objec
     rows = list(csv.DictReader(evidence_path.open(encoding="utf-8", newline="")))
     histories: dict[str, dict[float, dict[str, float]]] = {}
     for row in rows:
+        shadow_tracks = json.loads(
+            row.get("classical_risk_track_measurements_json", "[]")
+        )
+        for item in shadow_tracks:
+            histories.setdefault(str(item["track_id"]), {})[
+                float(item["timestamp"])
+            ] = item
         track_id = row.get("classical_selected_track_id", "")
-        if not track_id:
+        if shadow_tracks or not track_id:
             continue
         for item in json.loads(row["classical_selected_observations_json"]):
             histories.setdefault(track_id, {})[float(item["timestamp"])] = item

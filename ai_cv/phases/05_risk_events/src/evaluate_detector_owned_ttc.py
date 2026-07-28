@@ -258,6 +258,23 @@ def _selected_track_evidence(
     }
 
 
+def _track_measurements_json(tracks: Iterable[object]) -> str:
+    """Repeat-one shadow telemetry for V2 noise characterization only."""
+    return json.dumps(
+        [
+            {
+                "track_id": int(track.track_id),
+                "timestamp": round(float(track.latest.timestamp), 6),
+                "depth_m": round(float(track.latest.depth_m), 6),
+                "center_x": round(float(track.latest.center_x), 3),
+                "depth_sigma_m": round(float(track.latest.depth_sigma_m), 6),
+            }
+            for track in tracks
+        ],
+        separators=(",", ":"),
+    )
+
+
 def _best_road_user_detection_iou(
     track: object | None, detections: Iterable[Detection]
 ) -> float:
@@ -1146,6 +1163,9 @@ def run(
                                 ),
                                 "classical_selected_yolo_iou": (
                                     turn_association_iou
+                                ),
+                                "classical_risk_track_measurements_json": (
+                                    _track_measurements_json(classical_risk_tracks)
                                 ),
                                 "path_intersection_possible": (
                                     path_intersection_possible
