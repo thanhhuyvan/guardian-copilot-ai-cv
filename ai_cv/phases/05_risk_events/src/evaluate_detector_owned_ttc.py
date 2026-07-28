@@ -229,6 +229,7 @@ def _selected_track_evidence(
             "selected_lr_support": "",
             "selected_history_length": 0,
             "selected_bbox_xyxy": "",
+            "selected_observations_json": "[]",
         }
     _, _, residual = selected.motion_state()
     return {
@@ -242,6 +243,18 @@ def _selected_track_evidence(
         "selected_lr_support": float(selected.latest.lr_support),
         "selected_history_length": len(selected.observations),
         "selected_bbox_xyxy": json.dumps(list(map(int, selected.bbox))),
+        "selected_observations_json": json.dumps(
+            [
+                {
+                    "timestamp": round(float(item.timestamp), 6),
+                    "depth_m": round(float(item.depth_m), 6),
+                    "center_x": round(float(item.center_x), 3),
+                    "depth_sigma_m": round(float(item.depth_sigma_m), 6),
+                }
+                for item in selected.observations
+            ],
+            separators=(",", ":"),
+        ),
     }
 
 
