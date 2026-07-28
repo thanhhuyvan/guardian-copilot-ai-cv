@@ -73,6 +73,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
     args.integrated_union_events = True
     args.parallel_inference = True
+    # The Phase 05 evaluator owns experimental gates.  Pin every one off for
+    # the deployment candidate so later research switches cannot leak into a
+    # certification run.
+    args.experimental_classical_minimum_closing_speed_mps = 0.3
+    args.experimental_low_ego_speed_max_mps = 0.0
+    args.experimental_low_ego_suppressed_ttc = None
+    args.experimental_turn_lateral_accel_mps2 = 0.0
+    args.experimental_turn_minimum_yolo_iou = 0.0
+    args.experimental_path_intersection = False
+    args.experimental_path_corridor_half_width_m = 1.75
     args.detections_dir = (
         REPOSITORY_ROOT
         / "ai_cv"
