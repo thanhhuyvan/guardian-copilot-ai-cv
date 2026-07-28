@@ -10,6 +10,12 @@ and live compute P95 `63.22 ms`, but is not yet the sole default because T01
 and T02 regress. See
 [`artifacts/DETECTOR_OWNED_TTC_ABLATION.md`](artifacts/DETECTOR_OWNED_TTC_ABLATION.md).
 
+A leakage-controlled confidence-router experiment is documented in
+[`artifacts/CONFIDENCE_ROUTER_LOTO.md`](artifacts/CONFIDENCE_ROUTER_LOTO.md).
+The learned router was rejected (`F1 0.488`). A parameter-free conservative
+union reaches `F1 0.658`, but remains an event-layer candidate because T01
+false positives increase substantially.
+
 The research basis and fixed first ablation are documented in
 [`notes/PAPER_RESEARCH.md`](notes/PAPER_RESEARCH.md).
 

@@ -161,6 +161,42 @@ def _write_runtime_rows(path: Path, rows: list[dict[str, object]]) -> None:
         writer.writerows(rows)
 
 
+def _selected_track_evidence(
+    tracks: list[object],
+    selected_track_id: int | None,
+) -> dict[str, object]:
+    selected = next(
+        (
+            track
+            for track in tracks
+            if int(track.track_id) == selected_track_id
+        ),
+        None,
+    )
+    if selected is None:
+        return {
+            "selected_track_id": "",
+            "selected_depth_m": "",
+            "selected_motion_residual_m": "",
+            "selected_observation_quality": "",
+            "selected_depth_confidence": "",
+            "selected_lr_support": "",
+            "selected_history_length": 0,
+        }
+    _, _, residual = selected.motion_state()
+    return {
+        "selected_track_id": int(selected.track_id),
+        "selected_depth_m": float(selected.latest.depth_m),
+        "selected_motion_residual_m": float(residual),
+        "selected_observation_quality": float(selected.latest.quality),
+        "selected_depth_confidence": float(
+            selected.latest.depth_confidence
+        ),
+        "selected_lr_support": float(selected.latest.lr_support),
+        "selected_history_length": len(selected.observations),
+    }
+
+
 def _ttc_text(value: float) -> str:
     return "inf" if not math.isfinite(value) else f"{value:.6f}"
 
@@ -267,6 +303,7 @@ def run(args: argparse.Namespace) -> dict[str, object]:
         "trips": {},
     }
     runtime_rows: list[dict[str, object]] = []
+    evidence_rows_by_trip: dict[str, list[dict[str, object]]] = {}
     nondeterministic_predictions = 0
     prediction_comparisons = 0
     gpu_memory: dict[str, float] | None = None
@@ -398,17 +435,24 @@ def run(args: argparse.Namespace) -> dict[str, object]:
                         "maximum_depth_m": 20.0,
                         "maximum_motion_residual_m": 0.8,
                     }
-                    plain_ttc, _, _, _ = select_minimum_ttc(
-                        risk_tracks,
-                        ground_confidence,
-                        maximum_closing_speed_mps=20.0,
-                        **common,
+                    plain_ttc, plain_track_id, plain_confidence, plain_closing = (
+                        select_minimum_ttc(
+                            risk_tracks,
+                            ground_confidence,
+                            maximum_closing_speed_mps=20.0,
+                            **common,
+                        )
                     )
                     ego_cap = min(
                         20.0,
                         max(3.0, float(frame.speed_kmh) / 3.6 + 3.0),
                     )
-                    capped_ttc, _, _, _ = select_minimum_ttc(
+                    (
+                        capped_ttc,
+                        capped_track_id,
+                        capped_confidence,
+                        capped_closing,
+                    ) = select_minimum_ttc(
                         risk_tracks,
                         ground_confidence,
                         maximum_closing_speed_mps=ego_cap,
@@ -470,6 +514,42 @@ def run(args: argparse.Namespace) -> dict[str, object]:
                             float(capped_ttc)
                         )
                         truth.append(float(frame.min_ttc))
+                        selected_evidence = _selected_track_evidence(
+                            risk_tracks, capped_track_id
+                        )
+                        evidence_rows_by_trip.setdefault(trip_id, []).append(
+                            {
+                                "frame_id": int(frame.frame_id),
+                                "timestamp": float(frame.timestamp),
+                                "predicted_ttc": _ttc_text(float(capped_ttc)),
+                                "ground_confidence": ground_confidence,
+                                "detection_count": len(detections),
+                                "depth_valid_component_count": len(components),
+                                "risk_track_count": len(risk_tracks),
+                                "selection_confidence": float(
+                                    capped_confidence
+                                ),
+                                "selected_closing_speed_mps": float(
+                                    capped_closing
+                                ),
+                                "ego_speed_mps": float(frame.speed_kmh) / 3.6,
+                                "uncapped_predicted_ttc": _ttc_text(
+                                    float(plain_ttc)
+                                ),
+                                "uncapped_selection_confidence": float(
+                                    plain_confidence
+                                ),
+                                "uncapped_selected_closing_speed_mps": float(
+                                    plain_closing
+                                ),
+                                "uncapped_selected_track_id": (
+                                    plain_track_id
+                                    if plain_track_id is not None
+                                    else ""
+                                ),
+                                **selected_evidence,
+                            }
+                        )
                     else:
                         prediction_comparisons += 2
                         nondeterministic_predictions += int(
@@ -551,6 +631,10 @@ def run(args: argparse.Namespace) -> dict[str, object]:
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
     _write_runtime_rows(args.output_dir / "runtime_frames.csv", runtime_rows)
+    for trip_id, rows in evidence_rows_by_trip.items():
+        _write_runtime_rows(
+            args.output_dir / "evidence" / f"{trip_id}.csv", rows
+        )
     live_latency = [
         float(row["pipeline_compute_ms"]) for row in runtime_rows
     ]

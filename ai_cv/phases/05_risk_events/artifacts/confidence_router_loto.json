@@ -1,0 +1,334 @@
+{
+  "agreement_policy": "classical fallback",
+  "banned_feature_tokens": [
+    "trip",
+    "frame",
+    "timestamp",
+    "truth",
+    "target"
+  ],
+  "decision": {
+    "learned_router_passed": false,
+    "promotion_blocker": "T01 per-trip regression remains; external validation and event-level false-alert analysis are required.",
+    "recommended_runtime_policy": "conservative_union_candidate"
+  },
+  "feature_names": [
+    "detector_is_danger",
+    "detector_minus_classical_confidence",
+    "classical_minus_detector_residual",
+    "detector_minus_classical_quality",
+    "detector_minus_classical_lr_support",
+    "detector_minus_classical_history",
+    "detector_depth_confidence",
+    "detector_minus_classical_proposal_count",
+    "detector_risk_track_count",
+    "detector_minus_classical_ground_confidence",
+    "ego_speed_normalized",
+    "inverse_ttc_disagreement"
+  ],
+  "folds": [
+    {
+      "classical": {
+        "composite": 41.21101759881312,
+        "f1": 0.45161290322580644,
+        "fn": 3,
+        "fp": 14,
+        "mae_critical": 40.54730833333334,
+        "precision": 0.3333333333333333,
+        "recall": 0.7,
+        "tp": 7
+      },
+      "conservative_union": {
+        "composite": 35.430030185739916,
+        "f1": 0.29166666666666663,
+        "fn": 3,
+        "fp": 31,
+        "mae_critical": 40.54730833333334,
+        "precision": 0.18421052631578946,
+        "recall": 0.7,
+        "tp": 7
+      },
+      "detector": {
+        "composite": 37.29887196860698,
+        "f1": 0.3125,
+        "fn": 5,
+        "fp": 17,
+        "mae_critical": 56.703904333333334,
+        "precision": 0.22727272727272727,
+        "recall": 0.5,
+        "tp": 5
+      },
+      "held_out_trip": "T01-Sample",
+      "router": {
+        "composite": 35.66861404701994,
+        "f1": 0.2978723404255319,
+        "fn": 3,
+        "fp": 30,
+        "mae_critical": 40.54730833333334,
+        "precision": 0.1891891891891892,
+        "recall": 0.7,
+        "tp": 7
+      },
+      "training_detector_choice_fraction": 0.7362637362637363,
+      "training_disagreements": 91,
+      "validation_detector_choices": 18,
+      "validation_disagreements": 33
+    },
+    {
+      "classical": {
+        "composite": 46.27738088313352,
+        "f1": 0.7647058823529411,
+        "fn": 5,
+        "fp": 3,
+        "mae_critical": 31.464005263157894,
+        "precision": 0.8125,
+        "recall": 0.7222222222222222,
+        "tp": 13
+      },
+      "conservative_union": {
+        "composite": 46.078713180785556,
+        "f1": 0.7567567567567567,
+        "fn": 4,
+        "fp": 5,
+        "mae_critical": 21.315206157894735,
+        "precision": 0.7368421052631579,
+        "recall": 0.7777777777777778,
+        "tp": 14
+      },
+      "detector": {
+        "composite": 38.19386601514479,
+        "f1": 0.5185185185185185,
+        "fn": 11,
+        "fp": 2,
+        "mae_critical": 57.5133794736842,
+        "precision": 0.7777777777777778,
+        "recall": 0.3888888888888889,
+        "tp": 7
+      },
+      "held_out_trip": "T02-Sample",
+      "router": {
+        "composite": 36.29797069157566,
+        "f1": 0.46153846153846156,
+        "fn": 12,
+        "fp": 2,
+        "mae_critical": 67.601,
+        "precision": 0.75,
+        "recall": 0.3333333333333333,
+        "tp": 6
+      },
+      "training_detector_choice_fraction": 0.6936936936936937,
+      "training_disagreements": 111,
+      "validation_detector_choices": 8,
+      "validation_disagreements": 13
+    },
+    {
+      "classical": {
+        "composite": 30.71096974663328,
+        "f1": 0.3333333333333333,
+        "fn": 21,
+        "fp": 11,
+        "mae_critical": 62.230821875,
+        "precision": 0.42105263157894735,
+        "recall": 0.27586206896551724,
+        "tp": 8
+      },
+      "conservative_union": {
+        "composite": 43.5178545895899,
+        "f1": 0.7096774193548386,
+        "fn": 7,
+        "fp": 11,
+        "mae_critical": 27.86612246875,
+        "precision": 0.6666666666666666,
+        "recall": 0.7586206896551724,
+        "tp": 22
+      },
+      "detector": {
+        "composite": 48.55655314445039,
+        "f1": 0.8400000000000001,
+        "fn": 8,
+        "fp": 0,
+        "mae_critical": 33.87493609375,
+        "precision": 1.0,
+        "recall": 0.7241379310344828,
+        "tp": 21
+      },
+      "held_out_trip": "T03-Sample",
+      "router": {
+        "composite": 35.509876484158255,
+        "f1": 0.46511627906976755,
+        "fn": 19,
+        "fp": 4,
+        "mae_critical": 61.76711775,
+        "precision": 0.7142857142857143,
+        "recall": 0.3448275862068966,
+        "tp": 10
+      },
+      "training_detector_choice_fraction": 0.5714285714285714,
+      "training_disagreements": 98,
+      "validation_detector_choices": 9,
+      "validation_disagreements": 26
+    },
+    {
+      "classical": {
+        "composite": 50.1202341093355,
+        "f1": 0.7628865979381444,
+        "fn": 15,
+        "fp": 8,
+        "mae_critical": 37.15508421052632,
+        "precision": 0.8222222222222222,
+        "recall": 0.7115384615384616,
+        "tp": 37
+      },
+      "conservative_union": {
+        "composite": 53.46042644634021,
+        "f1": 0.8598130841121494,
+        "fn": 6,
+        "fp": 9,
+        "mae_critical": 26.932790065789476,
+        "precision": 0.8363636363636363,
+        "recall": 0.8846153846153846,
+        "tp": 46
+      },
+      "detector": {
+        "composite": 54.09091016782909,
+        "f1": 0.8737864077669903,
+        "fn": 7,
+        "fp": 6,
+        "mae_critical": 22.074341263157898,
+        "precision": 0.8823529411764706,
+        "recall": 0.8653846153846154,
+        "tp": 45
+      },
+      "held_out_trip": "T04-Sample",
+      "router": {
+        "composite": 50.425135460092605,
+        "f1": 0.7755102040816326,
+        "fn": 14,
+        "fp": 8,
+        "mae_critical": 38.43896426315789,
+        "precision": 0.8260869565217391,
+        "recall": 0.7307692307692307,
+        "tp": 38
+      },
+      "training_detector_choice_fraction": 0.6272727272727273,
+      "training_disagreements": 110,
+      "validation_detector_choices": 3,
+      "validation_disagreements": 14
+    },
+    {
+      "classical": {
+        "composite": 30.95739481171693,
+        "f1": 0.2608695652173913,
+        "fn": 23,
+        "fp": 45,
+        "mae_critical": 64.33147234042555,
+        "precision": 0.21052631578947367,
+        "recall": 0.34285714285714286,
+        "tp": 12
+      },
+      "conservative_union": {
+        "composite": 39.31504580337915,
+        "f1": 0.5090909090909091,
+        "fn": 7,
+        "fp": 47,
+        "mae_critical": 31.216212191489365,
+        "precision": 0.37333333333333335,
+        "recall": 0.8,
+        "tp": 28
+      },
+      "detector": {
+        "composite": 38.3746146989965,
+        "f1": 0.42857142857142855,
+        "fn": 14,
+        "fp": 42,
+        "mae_critical": 25.059824106382983,
+        "precision": 0.3333333333333333,
+        "recall": 0.6,
+        "tp": 21
+      },
+      "held_out_trip": "T05-Sample",
+      "router": {
+        "composite": 27.171308625861307,
+        "f1": 0.12195121951219512,
+        "fn": 30,
+        "fp": 42,
+        "mae_critical": 68.45486712765955,
+        "precision": 0.10638297872340426,
+        "recall": 0.14285714285714285,
+        "tp": 5
+      },
+      "training_detector_choice_fraction": 0.6382978723404256,
+      "training_disagreements": 94,
+      "validation_detector_choices": 14,
+      "validation_disagreements": 30
+    },
+    {
+      "classical": {
+        "composite": 38.99558740977629,
+        "f1": 0.8070175438596491,
+        "fn": 14,
+        "fp": 8,
+        "mae_critical": 33.10541649484536,
+        "precision": 0.8518518518518519,
+        "recall": 0.7666666666666667,
+        "tp": 46
+      },
+      "conservative_union": {
+        "composite": 39.48898843554113,
+        "f1": 0.8205128205128205,
+        "fn": 12,
+        "fp": 9,
+        "mae_critical": 32.07901894845361,
+        "precision": 0.8421052631578947,
+        "recall": 0.8,
+        "tp": 48
+      },
+      "detector": {
+        "composite": 40.439194394563486,
+        "f1": 0.8214285714285715,
+        "fn": 14,
+        "fp": 6,
+        "mae_critical": 32.119604134020626,
+        "precision": 0.8846153846153846,
+        "recall": 0.7666666666666667,
+        "tp": 46
+      },
+      "held_out_trip": "T06-Sample",
+      "router": {
+        "composite": 38.831017370627166,
+        "f1": 0.8035714285714286,
+        "fn": 15,
+        "fp": 7,
+        "mae_critical": 34.11172577319587,
+        "precision": 0.8653846153846154,
+        "recall": 0.75,
+        "tp": 45
+      },
+      "training_detector_choice_fraction": 0.6551724137931034,
+      "training_disagreements": 116,
+      "validation_detector_choices": 2,
+      "validation_disagreements": 8
+    }
+  ],
+  "macro": {
+    "classical_composite": 39.71209742656811,
+    "classical_f1": 0.5634043043212109,
+    "classical_mae_critical": 44.80568475288141,
+    "conservative_union_composite": 42.88184310689598,
+    "conservative_union_f1": 0.6579196094156902,
+    "conservative_union_mae_critical": 29.992776360951755,
+    "detector_composite": 42.82566839826521,
+    "detector_f1": 0.6324674877142514,
+    "detector_mae_critical": 37.89099823405484,
+    "router_composite": 37.31732044655582,
+    "router_f1": 0.48759332219983625,
+    "router_mae_critical": 51.82016387455777
+  },
+  "model": {
+    "l2": 2.0,
+    "threshold": 0.5,
+    "type": "class-balanced logistic regression"
+  },
+  "schema": "guardian.phase05.confidence-router-loto.v1",
+  "selection_scope": "danger-decision disagreements only"
+}

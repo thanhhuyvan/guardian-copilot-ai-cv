@@ -6,7 +6,7 @@
 - [ ] Implement hysteresis/debounce.
 - [ ] Implement event start/end/merge.
 - [ ] Implement clip buffer/export.
-- [ ] Implement per-trip CV summary.
+- [x] Implement per-trip CV summary.
 - [ ] Validate event JSON schema.
 - [ ] Sinh event demo cho practice trips.
 - [ ] Review output với integration owner.

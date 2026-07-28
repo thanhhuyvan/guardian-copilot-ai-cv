@@ -24,6 +24,12 @@ still regress versus the fallback. See
 `artifacts/DETECTOR_OWNED_TTC_ABLATION.md`. This rules out a universal
 replacement and motivates a causal confidence/fusion decision in this phase.
 
+That confidence decision has now been tested with six LOTO folds. The learned
+router failed (`F1 0.488`). A fixed conservative union reached `F1 0.658`,
+but T01 regressed to `0.292`; use it only as an input to event hysteresis until
+false-event duration is validated. See
+`artifacts/CONFIDENCE_ROUTER_LOTO.md`.
+
 Phase 04B's semantic comparator was rejected because its best oracle F1 was
 only 0.5745 and its full LOTO selection was infeasible.
 
