@@ -35,7 +35,10 @@ def audit(evidence_path: Path, focal_px: float, cx_px: float) -> dict[str, objec
     histories: dict[str, dict[float, dict[str, float]]] = {}
     for row in rows:
         shadow_tracks = json.loads(
-            row.get("classical_risk_track_measurements_json", "[]")
+            row.get(
+                "classical_track_measurements_json",
+                row.get("classical_risk_track_measurements_json", "[]"),
+            )
         )
         for item in shadow_tracks:
             histories.setdefault(str(item["track_id"]), {})[

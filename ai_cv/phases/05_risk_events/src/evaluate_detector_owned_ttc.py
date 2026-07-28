@@ -1164,8 +1164,8 @@ def run(
                                 "classical_selected_yolo_iou": (
                                     turn_association_iou
                                 ),
-                                "classical_risk_track_measurements_json": (
-                                    _track_measurements_json(classical_risk_tracks)
+                                "classical_track_measurements_json": (
+                                    _track_measurements_json(classical_tracks)
                                 ),
                                 "path_intersection_possible": (
                                     path_intersection_possible
