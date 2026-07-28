@@ -8,6 +8,9 @@ Phase 04B's YOLO26 research comparator was rejected at the accuracy gate. Phase
 0.5634`, composite `39.71`, compute P95 `54.40 ms`) without a YOLO runtime
 dependency.
 
+The research basis and fixed first ablation are documented in
+[`notes/PAPER_RESEARCH.md`](notes/PAPER_RESEARCH.md).
+
 ## Mục tiêu
 
 Biến TTC stream thành output sản phẩm ổn định và có thể giải thích.
