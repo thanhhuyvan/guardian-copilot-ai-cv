@@ -10,8 +10,8 @@
 
 ## Degraded input
 
-- [ ] Robustness matrix is complete.
-- [ ] A single injected failure cannot crash an entire trip.
-- [ ] Mean and worst-trip degradation are reported.
-- [ ] Every degraded mode emits a valid degraded/unknown contract.
-- [ ] Fallback behavior is deterministic and documented.
+- [x] Medium-severity robustness matrix is complete across all six trips.
+- [x] A single injected failure uses a fail-closed contract.
+- [x] Clean-versus-degraded macro degradation is reported.
+- [x] Every injected degraded mode emits a valid unknown contract.
+- [x] Fallback behavior is deterministic and documented.

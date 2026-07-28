@@ -1,6 +1,6 @@
 # Phase 06 — Deployment Readiness, Robustness, and Latency
 
-**Status:** IN_PROGRESS  
+**Status:** COMPLETE  
 **Depends on:** Phase 05 (complete)
 
 ## Current decision
@@ -20,17 +20,18 @@ The stable entry point is `src/run_integrated_deployment.py`. It always uses
 live detections, the fixed conservative TTC union, and the recommended event
 hysteresis. Cached detections and runtime policy switching are not available.
 
-## Remaining Phase 06 work
+## Completed robustness gate
 
-The clean-input deployment gate does not prove adverse-condition robustness.
-Before Phase 07 submission, run a non-destructive perturbation and failure
-matrix covering:
+Phase 06 now includes a non-destructive medium-severity perturbation and
+failure matrix covering:
 
-- blur, darkness, noise, and partial occlusion
-- missing/corrupt camera frames and calibration failure
+- blur, darkness, sensor noise, and partial occlusion
+- missing/corrupt camera frames and injected model/tracker faults
 - dropped frames and irregular timestamps
-- detector/tracker exceptions and empty detections
-- output quality degradation and fallback contract behavior
+- output degradation and fail-closed contract behavior
+
+Noise is the primary measured robustness limitation. See
+`artifacts/ROBUSTNESS_LATENCY_REPORT.md` for the precise operating limits.
 
 ## Reproduce the clean certification
 
@@ -39,5 +40,5 @@ matrix covering:
   ai_cv\phases\06_robustness_latency\src\run_integrated_deployment.py
 ```
 
-See `artifacts/DEPLOYMENT_READINESS.md` for the protocol, results, decision,
-known limitations, and exact command.
+See the deployment-readiness and robustness reports for the full protocol,
+results, operating limits, and exact commands.

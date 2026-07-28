@@ -21,7 +21,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict
 from pathlib import Path
-from typing import Iterable
+from typing import Callable, Iterable
 
 import numpy as np
 import psutil
@@ -299,7 +299,20 @@ def _latency_summary(values: list[float]) -> dict[str, float]:
     }
 
 
-def run(args: argparse.Namespace) -> dict[str, object]:
+def run(
+    args: argparse.Namespace,
+    *,
+    image_transform: Callable[
+        [np.ndarray, np.ndarray, str, int], tuple[np.ndarray, np.ndarray]
+    ]
+    | None = None,
+    frame_selector: Callable[[object], bool] | None = None,
+) -> dict[str, object]:
+    """Run the live evaluator, optionally with an in-memory test transform.
+
+    The hooks exist for Phase 06 robustness evaluation.  They never write to
+    the input dataset and leave the normal deployment invocation unchanged.
+    """
     starter_root = args.starter_root.resolve()
     if str(starter_root) not in sys.path:
         sys.path.insert(0, str(starter_root))
@@ -463,6 +476,8 @@ def run(args: argparse.Namespace) -> dict[str, object]:
                 frames = frames[args.start_frame_index :]
             if args.max_frames_per_trip is not None:
                 frames = frames[: args.max_frames_per_trip]
+            if frame_selector is not None:
+                frames = [frame for frame in frames if frame_selector(frame)]
             for repeat_index in range(args.repeats):
                 tracker = ComponentTracker(
                     image_shape,
@@ -496,6 +511,10 @@ def run(args: argparse.Namespace) -> dict[str, object]:
                     left = dataset.load_left(frame.frame_id)
                     right = dataset.load_right(frame.frame_id)
                     image_load_ms = (time.perf_counter() - load_started) * 1000.0
+                    if image_transform is not None:
+                        left, right = image_transform(
+                            left, right, trip_id, int(frame.frame_id)
+                        )
                     pipeline_started = time.perf_counter()
                     inference_started = time.perf_counter()
                     if executor is not None:

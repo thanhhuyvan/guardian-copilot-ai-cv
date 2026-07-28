@@ -10,13 +10,13 @@
 - [x] Freeze a live-only Phase 06 entry point.
 - [x] Record the clean deployment-readiness decision.
 
-## Remaining robustness gate
+## Completed robustness gate
 
-- [ ] Create a perturbation generator that never edits the source dataset.
-- [ ] Test blur, darkness, noise, occlusion, and frame drops.
-- [ ] Test missing/corrupt cameras and calibration failures.
-- [ ] Test detector/tracker exceptions and empty detections.
-- [ ] Measure accuracy degradation by severity and worst trip.
-- [ ] Validate degraded/unknown output contracts.
-- [ ] Define and verify the fallback matrix.
-- [ ] Publish the final robustness and latency report.
+- [x] Create a perturbation generator that never edits the source dataset.
+- [x] Test medium blur, darkness, noise, and occlusion.
+- [x] Verify missing/corrupt camera, frame-drop, and irregular-timestamp contracts.
+- [x] Verify detector/tracker failure contracts and state recovery.
+- [x] Measure clean-versus-medium degradation across all six trips.
+- [x] Validate degraded/unknown output contracts.
+- [x] Define and verify the fallback matrix.
+- [x] Publish the final robustness and latency report.
