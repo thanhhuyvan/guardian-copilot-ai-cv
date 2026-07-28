@@ -250,6 +250,13 @@ def _find_track(tracks: list[object], track_id: int | None) -> object | None:
     )
 
 
+def _prefixed_evidence(
+    prefix: str, values: dict[str, object]
+) -> dict[str, object]:
+    """Avoid ambiguous selected-track fields in a multi-branch run."""
+    return {f"{prefix}_{name}": value for name, value in values.items()}
+
+
 def _risk_level(state: RiskState, raw_band: str) -> str:
     if state == RiskState.UNKNOWN:
         return "UNKNOWN"
@@ -802,6 +809,12 @@ def run(
                         selected_evidence = _selected_track_evidence(
                             risk_tracks, capped_track_id
                         )
+                        classical_selected_evidence = _selected_track_evidence(
+                            classical_risk_tracks, classical_track_id
+                        )
+                        union_selected_evidence = _selected_track_evidence(
+                            union_tracks, union_track_id
+                        )
                         evidence_rows_by_trip.setdefault(trip_id, []).append(
                             {
                                 "frame_id": int(frame.frame_id),
@@ -811,10 +824,22 @@ def run(
                                 "classical_predicted_ttc": _ttc_text(
                                     float(classical_ttc)
                                 ),
+                                "classical_selection_confidence": float(
+                                    classical_confidence
+                                ),
+                                "classical_selected_closing_speed_mps": float(
+                                    classical_closing
+                                ),
                                 "union_predicted_ttc": _ttc_text(
                                     float(union_ttc)
                                 ),
                                 "union_source": union_source,
+                                "union_selection_confidence": float(
+                                    union_confidence
+                                ),
+                                "union_selected_closing_speed_mps": float(
+                                    union_closing
+                                ),
                                 "raw_detections_json": detection_evidence_json(
                                     detections
                                 ),
@@ -844,6 +869,12 @@ def run(
                                     else ""
                                 ),
                                 **selected_evidence,
+                                **_prefixed_evidence(
+                                    "classical", classical_selected_evidence
+                                ),
+                                **_prefixed_evidence(
+                                    "union", union_selected_evidence
+                                ),
                             }
                         )
                         if risk_frame is not None:

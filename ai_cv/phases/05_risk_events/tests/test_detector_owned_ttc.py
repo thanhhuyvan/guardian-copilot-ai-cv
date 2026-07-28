@@ -15,7 +15,11 @@ for path in (SRC, PHASE02_SRC):
 
 from classical_geometry import collision_corridor_mask
 from detector_interfaces import Detection
-from evaluate_detector_owned_ttc import detection_component, detection_evidence_json
+from evaluate_detector_owned_ttc import (
+    _prefixed_evidence,
+    detection_component,
+    detection_evidence_json,
+)
 
 
 def test_detection_evidence_retains_raw_yolo_identity_and_box() -> None:
@@ -42,6 +46,13 @@ def test_detection_evidence_retains_raw_yolo_identity_and_box() -> None:
             "confidence": 0.4,
         },
     ]
+
+
+def test_prefixed_evidence_keeps_detector_and_classical_fields_distinct() -> None:
+    assert _prefixed_evidence("classical", {"track_id": 7, "quality": 0.8}) == {
+        "classical_track_id": 7,
+        "classical_quality": 0.8,
+    }
 
 
 def test_detection_component_uses_nearer_supported_disparity_mode() -> None:
