@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -14,7 +15,33 @@ for path in (SRC, PHASE02_SRC):
 
 from classical_geometry import collision_corridor_mask
 from detector_interfaces import Detection
-from evaluate_detector_owned_ttc import detection_component
+from evaluate_detector_owned_ttc import detection_component, detection_evidence_json
+
+
+def test_detection_evidence_retains_raw_yolo_identity_and_box() -> None:
+    evidence = json.loads(
+        detection_evidence_json(
+            [
+                Detection((1.25, 2.0, 30.5, 41.0), 0, "person", 0.81234567),
+                Detection((5.0, 6.0, 50.0, 60.0), 2, "car", 0.4),
+            ]
+        )
+    )
+
+    assert evidence == [
+        {
+            "bbox_xyxy": [1.25, 2.0, 30.5, 41.0],
+            "class_id": 0,
+            "class_name": "person",
+            "confidence": 0.812346,
+        },
+        {
+            "bbox_xyxy": [5.0, 6.0, 50.0, 60.0],
+            "class_id": 2,
+            "class_name": "car",
+            "confidence": 0.4,
+        },
+    ]
 
 
 def test_detection_component_uses_nearer_supported_disparity_mode() -> None:

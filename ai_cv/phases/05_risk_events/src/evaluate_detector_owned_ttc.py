@@ -60,6 +60,26 @@ ROAD_USER_CLASSES = frozenset(
 )
 
 
+def detection_evidence_json(detections: Iterable[Detection]) -> str:
+    """Serialize raw YOLO proposals for post-run error attribution.
+
+    The selected stereo track alone cannot establish whether a false alert
+    originated from YOLO, association, or classical geometry.  Retain the
+    detector's class, confidence and box in the repeat-one evidence CSV; this
+    has no effect on inference or TTC selection.
+    """
+    values = [
+        {
+            "bbox_xyxy": [round(float(value), 3) for value in detection.bbox_xyxy],
+            "class_id": int(detection.class_id),
+            "class_name": str(detection.class_name),
+            "confidence": round(float(detection.confidence), 6),
+        }
+        for detection in detections
+    ]
+    return json.dumps(values, sort_keys=True, separators=(",", ":"))
+
+
 def _clip_bbox(
     detection: Detection, image_shape: tuple[int, int]
 ) -> tuple[int, int, int, int] | None:
@@ -786,7 +806,18 @@ def run(
                             {
                                 "frame_id": int(frame.frame_id),
                                 "timestamp": float(frame.timestamp),
+                                # Backward-compatible detector-owned TTC.
                                 "predicted_ttc": _ttc_text(float(capped_ttc)),
+                                "classical_predicted_ttc": _ttc_text(
+                                    float(classical_ttc)
+                                ),
+                                "union_predicted_ttc": _ttc_text(
+                                    float(union_ttc)
+                                ),
+                                "union_source": union_source,
+                                "raw_detections_json": detection_evidence_json(
+                                    detections
+                                ),
                                 "ground_confidence": ground_confidence,
                                 "detection_count": len(detections),
                                 "depth_valid_component_count": len(components),
