@@ -262,6 +262,57 @@ def _best_road_user_detection_iou(
     )
 
 
+def _path_intersection_geometry(
+    track: object | None,
+    *,
+    ttc_sec: float,
+    focal_length_px: float,
+    principal_x_px: float,
+    ego_lateral_accel_mps2: float,
+    corridor_half_width_m: float,
+) -> tuple[bool, float | None]:
+    """Causally test whether a track can occupy the ego path at its TTC.
+
+    The calculation uses only current/past track observations.  It returns
+    ``True`` (do not suppress) when history or geometry is insufficient.
+    """
+    if (
+        track is None
+        or not math.isfinite(ttc_sec)
+        or not 0.0 < ttc_sec <= 2.0
+        or focal_length_px <= 0.0
+        or corridor_half_width_m <= 0.0
+    ):
+        return True, None
+    observations = list(track.observations)[-5:]
+    if len(observations) < 5:
+        return True, None
+    times = np.asarray([item.timestamp for item in observations], dtype=float)
+    depths = np.asarray([item.depth_m for item in observations], dtype=float)
+    centers = np.asarray([item.center_x for item in observations], dtype=float)
+    if (
+        not np.all(np.isfinite(times))
+        or not np.all(np.isfinite(depths))
+        or not np.all(np.isfinite(centers))
+        or times[-1] - times[0] < 0.15
+        or np.any(depths <= 0.0)
+    ):
+        return True, None
+    lateral_m = (centers - principal_x_px) * depths / focal_length_px
+    slopes = [
+        (lateral_m[j] - lateral_m[i]) / (times[j] - times[i])
+        for i in range(len(times) - 1)
+        for j in range(i + 1, len(times))
+        if times[j] > times[i]
+    ]
+    if not slopes:
+        return True, None
+    object_lateral_m = float(lateral_m[-1] + np.median(slopes) * ttc_sec)
+    ego_lateral_m = 0.5 * ego_lateral_accel_mps2 * ttc_sec * ttc_sec
+    separation_m = abs(object_lateral_m - ego_lateral_m)
+    return separation_m <= corridor_half_width_m, separation_m
+
+
 def _find_track(tracks: list[object], track_id: int | None) -> object | None:
     return next(
         (
@@ -421,6 +472,11 @@ def run(
         raise ValueError("experimental turn lateral acceleration must be finite and >= 0")
     if not 0.0 <= args.experimental_turn_minimum_yolo_iou <= 1.0:
         raise ValueError("experimental turn YOLO IoU must be in [0, 1]")
+    if (
+        not math.isfinite(args.experimental_path_corridor_half_width_m)
+        or args.experimental_path_corridor_half_width_m <= 0.0
+    ):
+        raise ValueError("experimental path corridor half-width must be > 0")
     starter_root = args.starter_root.resolve()
     if str(starter_root) not in sys.path:
         sys.path.insert(0, str(starter_root))
@@ -496,6 +552,10 @@ def run(
             "experimental_turn_minimum_yolo_iou": (
                 args.experimental_turn_minimum_yolo_iou
             ),
+            "experimental_path_intersection": args.experimental_path_intersection,
+            "experimental_path_corridor_half_width_m": (
+                args.experimental_path_corridor_half_width_m
+            ),
         },
         "hardware_independent_workload": {
             "detector": detector_workload,
@@ -538,6 +598,12 @@ def run(
                 ),
                 "experimental_turn_minimum_yolo_iou": (
                     args.experimental_turn_minimum_yolo_iou
+                ),
+                "experimental_path_intersection": (
+                    args.experimental_path_intersection
+                ),
+                "experimental_path_corridor_half_width_m": (
+                    args.experimental_path_corridor_half_width_m
                 ),
             },
             "confidence_temporal": {
@@ -591,6 +657,7 @@ def run(
                 int(calibration["image_width"]),
             )
             focal_length_px = float(calibration["K_left"][0][0])
+            principal_x_px = float(calibration["K_left"][0][2])
             baseline_m = float(calibration["baseline_m"])
             corridor = collision_corridor_mask(
                 image_shape,
@@ -789,6 +856,9 @@ def run(
                     risk_frame = None
                     turn_association_iou = 0.0
                     turn_association_gate_active = False
+                    path_intersection_possible = True
+                    path_lateral_separation_m: float | None = None
+                    path_gate_active = False
                     if (
                         args.integrated_union_events
                         and classical_tracker is not None
@@ -878,6 +948,32 @@ def run(
                         selected_classical_track = _find_track(
                             classical_risk_tracks, classical_track_id
                         )
+                        path_gate_active = bool(
+                            args.experimental_path_intersection
+                            and union_source.startswith("classical")
+                            and union_ttc < 2.0
+                        )
+                        if path_gate_active:
+                            (
+                                path_intersection_possible,
+                                path_lateral_separation_m,
+                            ) = _path_intersection_geometry(
+                                selected_classical_track,
+                                ttc_sec=float(union_ttc),
+                                focal_length_px=focal_length_px,
+                                principal_x_px=principal_x_px,
+                                ego_lateral_accel_mps2=float(frame.lateral_accel),
+                                corridor_half_width_m=(
+                                    args.experimental_path_corridor_half_width_m
+                                ),
+                            )
+                            if not path_intersection_possible:
+                                union_ttc = float(capped_ttc)
+                                union_track_id = capped_track_id
+                                union_confidence = float(capped_confidence)
+                                union_closing = float(capped_closing)
+                                union_tracks = risk_tracks
+                                union_source = "path_nonintersecting_classical_fallback"
                         turn_association_iou = _best_road_user_detection_iou(
                             selected_classical_track, detections
                         )
@@ -955,6 +1051,7 @@ def run(
                             "classical_risk_tracks": len(classical_risk_tracks),
                             "union_source": union_source,
                             "turn_association_gate_active": turn_association_gate_active,
+                            "path_gate_active": path_gate_active,
                         }
                     )
                     peak_rss_mb = max(
@@ -1036,6 +1133,14 @@ def run(
                                 ),
                                 "classical_selected_yolo_iou": (
                                     turn_association_iou
+                                ),
+                                "path_intersection_possible": (
+                                    path_intersection_possible
+                                ),
+                                "path_lateral_separation_m": (
+                                    ""
+                                    if path_lateral_separation_m is None
+                                    else path_lateral_separation_m
                                 ),
                                 "uncapped_predicted_ttc": _ttc_text(
                                     float(plain_ttc)
@@ -1362,6 +1467,21 @@ def parse_args() -> argparse.Namespace:
             "When the turn gate is active, replace an unassociated classical "
             "danger TTC with detector TTC. Zero disables it."
         ),
+    )
+    parser.add_argument(
+        "--experimental-path-intersection",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help=(
+            "Use causal stereo/YOLO track motion and ego curvature to reject "
+            "a classical danger track predicted outside the ego path."
+        ),
+    )
+    parser.add_argument(
+        "--experimental-path-corridor-half-width-m",
+        type=float,
+        default=1.75,
+        help="Half-width of the predicted ego path corridor in metres.",
     )
     parser.add_argument(
         "--parallel-inference",

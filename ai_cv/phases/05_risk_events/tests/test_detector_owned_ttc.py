@@ -18,10 +18,48 @@ from detector_interfaces import Detection
 from evaluate_detector_owned_ttc import (
     _apply_suppressed_ttc_floor,
     _best_road_user_detection_iou,
+    _path_intersection_geometry,
     _prefixed_evidence,
     detection_component,
     detection_evidence_json,
 )
+
+
+def test_path_intersection_rejects_a_side_track_but_keeps_an_entering_track() -> None:
+    class Observation:
+        def __init__(self, timestamp: float, depth_m: float, center_x: float):
+            self.timestamp = timestamp
+            self.depth_m = depth_m
+            self.center_x = center_x
+
+    class Track:
+        def __init__(self, centers: list[float]):
+            self.observations = [
+                Observation(index * 0.1, 10.0 - index * 0.4, center)
+                for index, center in enumerate(centers)
+            ]
+
+    # Fixed 3.6 m lateral offset: image centre shifts outward as depth shrinks.
+    side, separation = _path_intersection_geometry(
+        Track([500.0, 508.0, 517.0, 527.0, 534.0]),
+        ttc_sec=1.5,
+        focal_length_px=500.0,
+        principal_x_px=320.0,
+        ego_lateral_accel_mps2=0.0,
+        corridor_half_width_m=1.75,
+    )
+    entering, _ = _path_intersection_geometry(
+        Track([415.0, 414.0, 413.0, 411.0, 409.0]),
+        ttc_sec=1.5,
+        focal_length_px=500.0,
+        principal_x_px=320.0,
+        ego_lateral_accel_mps2=0.0,
+        corridor_half_width_m=1.75,
+    )
+
+    assert side is False
+    assert separation is not None and separation > 1.75
+    assert entering is True
 
 
 def test_classical_track_yolo_association_uses_only_road_users() -> None:
