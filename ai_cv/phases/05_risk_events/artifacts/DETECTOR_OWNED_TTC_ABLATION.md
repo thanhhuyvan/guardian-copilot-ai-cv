@@ -124,6 +124,28 @@ with zero mismatches. A conservative NVML sample measured peak device memory
 at `412.68 MB`; PyTorch reported `87.34 MB` peak allocated and `120 MB` peak
 reserved. These values pass the 5 GB gate.
 
+### Hardware-independent workload
+
+| Workload proxy | Value |
+|---|---:|
+| YOLO26n parameters | 2,572,280 |
+| YOLO26n compute at `640x640` | **6.119 GFLOPs/frame** |
+| Stereo input | `640x360`, left and right |
+| SGBM disparity range | 96 disparities/matcher |
+| SGBM disparity hypotheses | **44,236,800/pair** |
+
+GFLOPs are reported so the neural workload can be compared across hardware.
+They do not replace latency: SGBM is a branching/SIMD dynamic-programming
+algorithm rather than a neural graph with one standardized FLOP count, and the
+pipeline also includes memory traffic, CUDA launch overhead, CPU/GPU overlap,
+ground estimation, tracking, and TTC. Detector GFLOPs and SGBM hypotheses are
+therefore kept as separate workload proxies and are not added together.
+
+The reproducible result reports both:
+
+- hardware-independent workload for portability and model comparison; and
+- measured decoded-pair-to-risk percentiles for the deployment gate.
+
 The initial `6 OpenCV threads / 1 matcher` live smoke test reached only
 `101.65 ms` P95 because concurrent YOLO preprocessing contended with SGBM.
 The frozen `2 threads / 2 matchers` configuration reduced the official P95 to

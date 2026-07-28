@@ -195,6 +195,7 @@ def run(args: argparse.Namespace) -> dict[str, object]:
     )
     detector = None
     gpu_sampler = None
+    detector_workload: dict[str, float | int] | None = None
     if args.detector_backend != "cached":
         from benchmark_stereo_latency import ProcessGpuMemorySampler
         from yolo26_backends import get_detector_backend
@@ -204,6 +205,15 @@ def run(args: argparse.Namespace) -> dict[str, object]:
             str(args.model_path),
             args.detector_confidence,
         )
+        if hasattr(detector, "model") and hasattr(detector.model, "model"):
+            from ultralytics.utils.torch_utils import get_flops, get_num_params
+
+            detector_workload = {
+                "parameters": int(get_num_params(detector.model.model)),
+                "gflops_per_640x640_frame": float(
+                    get_flops(detector.model.model, imgsz=640)
+                ),
+            }
         gpu_sampler = ProcessGpuMemorySampler(0)
         gpu_sampler.start()
     executor = (
@@ -231,6 +241,20 @@ def run(args: argparse.Namespace) -> dict[str, object]:
             "max_frames_per_trip": args.max_frames_per_trip,
             "latency_target_ms": args.latency_target_ms,
             "disk_loading_excluded_from_gate": True,
+        },
+        "hardware_independent_workload": {
+            "detector": detector_workload,
+            "stereo": {
+                "native_width": 640,
+                "native_height": 360,
+                "disparities_per_matcher": 96,
+                "matchers": 2,
+                "disparity_hypotheses_per_pair": 640 * 360 * 96 * 2,
+            },
+            "interpretation": (
+                "Detector GFLOPs and SGBM disparity hypotheses are separate "
+                "workload proxies and must not be summed into one FLOP count."
+            ),
         },
         "policies": {
             "detector_owned": {
