@@ -337,6 +337,20 @@ def estimate_ground_model(
     return model, histogram
 
 
+def ground_model_reliable(
+    model: GroundModel | None,
+    *,
+    minimum_confidence: float,
+    maximum_median_residual_px: float,
+) -> bool:
+    """V-disparity outlier/reliability gate; thresholds require V2 audit."""
+    return bool(
+        model is not None
+        and model.confidence >= minimum_confidence
+        and model.median_residual_px <= maximum_median_residual_px
+    )
+
+
 def collision_corridor_mask(
     shape: tuple[int, int],
     *,

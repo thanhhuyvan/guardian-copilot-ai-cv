@@ -16,6 +16,8 @@
 /ai_cv/outputs/phase06_*/
 /ai_cv/outputs/phase08_*/
 /ai_cv/outputs/phase08_predeploy_final*.log
+/ai_cv/outputs/phase09_*/
+/ai_cv/outputs/phase09_*.log
 !/ai_cv/outputs/**/.gitkeep
 !/ai_cv/outputs/README.md
 
