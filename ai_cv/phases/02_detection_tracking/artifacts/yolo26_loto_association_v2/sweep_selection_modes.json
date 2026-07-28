@@ -1,0 +1,209 @@
+{
+  "baseline": {
+    "macro_f1": 0.5634043043212109,
+    "macro_composite": 39.71206788805704,
+    "macro_mae_critical": 44.80568137544902,
+    "total_fp": 89,
+    "macro_recall": 0.5865244270416684,
+    "per_trip": {
+      "T01-Sample": {
+        "f1": 0.45161290322580644,
+        "composite": 41.21096591233401,
+        "mae_critical": 40.54729191666667,
+        "fp": 14,
+        "recall": 0.7
+      },
+      "T02-Sample": {
+        "f1": 0.7647058823529411,
+        "composite": 46.27737230884787,
+        "mae_critical": 31.46400836842105,
+        "fp": 3,
+        "recall": 0.7222222222222222
+      },
+      "T03-Sample": {
+        "f1": 0.3333333333333333,
+        "composite": 30.710841867995516,
+        "mae_critical": 62.23081790625,
+        "fp": 11,
+        "recall": 0.27586206896551724
+      },
+      "T04-Sample": {
+        "f1": 0.7628865979381444,
+        "composite": 50.12024789623946,
+        "mae_critical": 37.15508127631579,
+        "fp": 8,
+        "recall": 0.7115384615384616
+      },
+      "T05-Sample": {
+        "f1": 0.2608695652173913,
+        "composite": 30.957374637712753,
+        "mae_critical": 64.33147438297873,
+        "fp": 45,
+        "recall": 0.34285714285714286
+      },
+      "T06-Sample": {
+        "f1": 0.8070175438596491,
+        "composite": 38.995604705212614,
+        "mae_critical": 33.10541440206186,
+        "fp": 8,
+        "recall": 0.7666666666666667
+      }
+    }
+  },
+  "global_best": {
+    "config": "s0.2_m2_d5.0",
+    "macro_f1": 0.574515415432322,
+    "macro_composite": 40.2343360385868,
+    "macro_mae_critical": 44.80568137544902,
+    "passes_comp_gate": true,
+    "passes_mae_gate": true,
+    "feasible": true,
+    "total_fp": 81,
+    "macro_recall": 0.5865244270416684,
+    "selection_rule": "macro F1 with composite>=38.4 and macro MAE<=baseline+1e-4"
+  },
+  "loto": {
+    "macro_f1": 0.5286360507260295,
+    "macro_composite": 37.94952774920139,
+    "macro_mae_critical": 46.95251795152567,
+    "feasible_folds": 5,
+    "infeasible_folds": 1,
+    "t05_false_positives": 45,
+    "t03_recall": 0.2413793103448276,
+    "folds": [
+      {
+        "validation_trip": "T01-Sample",
+        "selected_config": "s0.2_m2_d5.0",
+        "infeasible": false,
+        "val_f1": 0.45161290322580644,
+        "val_composite": 41.21096591233401,
+        "val_mae": 40.54729191666667,
+        "val_fp": 14,
+        "val_recall": 0.7
+      },
+      {
+        "validation_trip": "T02-Sample",
+        "selected_config": "s0.2_m2_d5.0",
+        "infeasible": false,
+        "val_f1": 0.7647058823529411,
+        "val_composite": 46.44602050776258,
+        "val_mae": 31.46400836842105,
+        "val_fp": 3,
+        "val_recall": 0.7222222222222222
+      },
+      {
+        "validation_trip": "T03-Sample",
+        "selected_config": "s0.2_m2_d4.0",
+        "infeasible": false,
+        "val_f1": 0.358974358974359,
+        "val_composite": 31.98929106428995,
+        "val_mae": 65.31440068750001,
+        "val_fp": 3,
+        "val_recall": 0.2413793103448276
+      },
+      {
+        "validation_trip": "T04-Sample",
+        "selected_config": null,
+        "infeasible": true,
+        "val_f1": NaN,
+        "val_composite": NaN,
+        "val_mae": NaN,
+        "val_fp": null,
+        "val_recall": NaN
+      },
+      {
+        "validation_trip": "T05-Sample",
+        "selected_config": "s0.2_m2_d5.0",
+        "infeasible": false,
+        "val_f1": 0.2608695652173913,
+        "val_composite": 31.105756556407812,
+        "val_mae": 64.33147438297873,
+        "val_fp": 45,
+        "val_recall": 0.34285714285714286
+      },
+      {
+        "validation_trip": "T06-Sample",
+        "selected_config": "s0.2_m2_d5.0",
+        "infeasible": false,
+        "val_f1": 0.8070175438596491,
+        "val_composite": 38.995604705212614,
+        "val_mae": 33.10541440206186,
+        "val_fp": 8,
+        "val_recall": 0.7666666666666667
+      }
+    ],
+    "selection_rule": "per fold: train on 5 trips, pick config maximizing train macro F1 subject to composite>=38.4 and MAE<=train baseline+1e-4; evaluate once on held-out trip"
+  },
+  "oracle_per_trip": {
+    "macro_f1": 0.574515415432322,
+    "macro_composite": 40.181497685651834,
+    "macro_mae_critical": 44.80568137544902,
+    "passes_composite_gate": true,
+    "passes_mae_gate": true,
+    "selection_space": "baseline (semantics off) + 27 semantic configs",
+    "description": "UPPER BOUND ONLY -- not selectable (uses test-trip labels to choose baseline or a semantic config per trip); reported to bound the achievable F1 ceiling.",
+    "per_trip": {
+      "T01-Sample": {
+        "config": "baseline",
+        "f1": 0.45161290322580644,
+        "composite": 41.21096591233401,
+        "mae_critical": 40.54729191666667,
+        "fp": 14,
+        "recall": 0.7
+      },
+      "T02-Sample": {
+        "config": "baseline",
+        "f1": 0.7647058823529411,
+        "composite": 46.27737230884787,
+        "mae_critical": 31.46400836842105,
+        "fp": 3,
+        "recall": 0.7222222222222222
+      },
+      "T03-Sample": {
+        "config": "s0.2_m2_d5.0",
+        "f1": 0.4,
+        "composite": 33.527420653564306,
+        "mae_critical": 62.23081790625,
+        "fp": 3,
+        "recall": 0.27586206896551724
+      },
+      "T04-Sample": {
+        "config": "baseline",
+        "f1": 0.7628865979381444,
+        "composite": 50.12024789623946,
+        "mae_critical": 37.15508127631579,
+        "fp": 8,
+        "recall": 0.7115384615384616
+      },
+      "T05-Sample": {
+        "config": "baseline",
+        "f1": 0.2608695652173913,
+        "composite": 30.957374637712753,
+        "mae_critical": 64.33147438297873,
+        "fp": 45,
+        "recall": 0.34285714285714286
+      },
+      "T06-Sample": {
+        "config": "baseline",
+        "f1": 0.8070175438596491,
+        "composite": 38.995604705212614,
+        "mae_critical": 33.10541440206186,
+        "fp": 8,
+        "recall": 0.7666666666666667
+      }
+    }
+  },
+  "gates_vs_target": {
+    "target_macro_f1_ge_0_60": {
+      "baseline": false,
+      "global_best": false,
+      "loto": false,
+      "oracle": false
+    },
+    "target_mae_no_regression_vs_baseline": {
+      "global_best": true,
+      "loto_all_feasible": false,
+      "oracle": true
+    }
+  }
+}

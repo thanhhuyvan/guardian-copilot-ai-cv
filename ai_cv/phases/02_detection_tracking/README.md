@@ -1,6 +1,6 @@
 # Phase 02 - Target Extraction and Tracking
 
-**Status:** STAGE 2A COMPLETE — Stage 2B gate ready  
+**Status:** COMPLETE — Stage 2A retained; Stage 2B YOLO26 candidate rejected  
 **Depends on:** Phase 01
 
 ## Mục tiêu
@@ -48,6 +48,13 @@ promote làm target identity cuối.
 
 Stage 2B phải tuân theo promotion gate:
 [`notes/STAGE2B_EXPERIMENT_GATE.md`](notes/STAGE2B_EXPERIMENT_GATE.md).
+
+The YOLO26 semantic-fusion comparator was diagnosed and corrected for symmetric
+component/box containment. Its best global macro danger-F1 was `0.5745`, but
+leave-one-trip-out validation remained infeasible and the frozen `0.60` F1
+gate was not reachable even by the per-trip oracle. The candidate is therefore
+not promoted; see
+[`artifacts/yolo26_loto_association_v2/PHASE04B_FINAL_DECISION.md`](artifacts/yolo26_loto_association_v2/PHASE04B_FINAL_DECISION.md).
 
 Vai trò và shortlist deep learning cho stereo/TTC:
 [`artifacts/DEEP_STEREO_RESEARCH_001.md`](artifacts/DEEP_STEREO_RESEARCH_001.md).

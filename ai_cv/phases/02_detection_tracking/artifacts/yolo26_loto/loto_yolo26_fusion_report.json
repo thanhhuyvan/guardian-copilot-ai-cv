@@ -1,0 +1,54 @@
+{
+  "macro_summary": null,
+  "fold_details": [
+    {
+      "fold": 1,
+      "validation_trip": "T01-Sample",
+      "selected_config": "INFEASIBLE",
+      "train_metrics": null,
+      "val_metrics": null,
+      "infeasible": true
+    },
+    {
+      "fold": 2,
+      "validation_trip": "T02-Sample",
+      "selected_config": "INFEASIBLE",
+      "train_metrics": null,
+      "val_metrics": null,
+      "infeasible": true
+    },
+    {
+      "fold": 3,
+      "validation_trip": "T03-Sample",
+      "selected_config": "INFEASIBLE",
+      "train_metrics": null,
+      "val_metrics": null,
+      "infeasible": true
+    },
+    {
+      "fold": 4,
+      "validation_trip": "T04-Sample",
+      "selected_config": "INFEASIBLE",
+      "train_metrics": null,
+      "val_metrics": null,
+      "infeasible": true
+    },
+    {
+      "fold": 5,
+      "validation_trip": "T05-Sample",
+      "selected_config": "INFEASIBLE",
+      "train_metrics": null,
+      "val_metrics": null,
+      "infeasible": true
+    },
+    {
+      "fold": 6,
+      "validation_trip": "T06-Sample",
+      "selected_config": "INFEASIBLE",
+      "train_metrics": null,
+      "val_metrics": null,
+      "infeasible": true
+    }
+  ],
+  "infeasible_folds": 6
+}

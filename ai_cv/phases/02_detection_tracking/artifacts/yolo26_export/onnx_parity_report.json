@@ -1,0 +1,61 @@
+{
+  "total_matched_detections": 87,
+  "frames_with_pytorch_detections": 45,
+  "pytorch_device": "cuda:0",
+  "onnx_providers": [
+    "CUDAExecutionProvider",
+    "CPUExecutionProvider"
+  ],
+  "class_agreement_ratio": 0.9655172413793104,
+  "median_matched_box_iou": 0.9967534800648697,
+  "mean_confidence_diff": 0.02052667908284856,
+  "confidence_diff_distribution": {
+    "p50": 0.0072,
+    "p90": 0.0383,
+    "p95": 0.1156,
+    "p99": 0.2512,
+    "max": 0.279,
+    "count_gt_0_02": 17
+  },
+  "class_swaps": {
+    "total": 3,
+    "same_box_competing_class": 3,
+    "distinct_object": 0,
+    "details": [
+      {
+        "frame": "000150.jpg",
+        "torch_class": "car",
+        "torch_conf": 0.4464,
+        "onnx_class": "truck",
+        "onnx_conf": 0.4892,
+        "iou": 0.998,
+        "same_box": true
+      },
+      {
+        "frame": "000350.jpg",
+        "torch_class": "truck",
+        "torch_conf": 0.251,
+        "onnx_class": "car",
+        "onnx_conf": 0.4976,
+        "iou": 0.9968,
+        "same_box": true
+      },
+      {
+        "frame": "000250.jpg",
+        "torch_class": "truck",
+        "torch_conf": 0.2986,
+        "onnx_class": "car",
+        "onnx_conf": 0.4552,
+        "iou": 0.9988,
+        "same_box": true
+      }
+    ]
+  },
+  "parity_valid": true,
+  "gates_passed": {
+    "min_matched_detections": true,
+    "class_agreement_ge_99": false,
+    "median_iou_ge_98": true,
+    "mean_conf_diff_le_0_02": false
+  }
+}

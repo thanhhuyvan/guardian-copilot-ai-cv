@@ -27,6 +27,8 @@
 - [x] Freeze reference metrics, falsification order and promotion criteria.
 - [x] Research deep stereo, uncertainty and temporal augmentation roles.
 - [x] Freeze stronger-machine ablation ladder and promotion targets.
-- [ ] Compare detector/semantic candidate with strongest classical pipeline.
-- [ ] Check license, class mapping, latency and robustness.
-- [ ] Promote only if quality/value gain justifies compute and dependency cost.
+- [x] Compare detector/semantic candidate with strongest classical pipeline.
+- [x] Check license and class mapping; stop latency/robustness work after the
+  candidate fails the earlier accuracy gate.
+- [x] Decide promotion: reject pretrained YOLO26 fusion; retain the classical
+  guarded pipeline for the next phase.

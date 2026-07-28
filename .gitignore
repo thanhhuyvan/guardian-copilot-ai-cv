@@ -13,6 +13,12 @@
 !/ai_cv/outputs/**/.gitkeep
 !/ai_cv/outputs/README.md
 
+# Phase 04B annotation overlays are large derived images regenerable by
+# src/build_t03_annotation_scaffold.py; ignore them but keep the small label
+# CSVs and reproducibility JSON reports trackable.
+/ai_cv/phases/02_detection_tracking/artifacts/yolo26_annotation/overlays/
+/ai_cv/phases/02_detection_tracking/artifacts/yolo26_reference/overlays_72/
+
 # Model weights and large numeric artifacts
 *.pt
 *.pth
@@ -40,6 +46,7 @@ __pycache__/
 .coverage
 htmlcov/
 .venv/
+.venv_yolo26/
 venv/
 
 # Notebooks

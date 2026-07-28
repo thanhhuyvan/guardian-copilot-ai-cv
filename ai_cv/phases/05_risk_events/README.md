@@ -1,7 +1,12 @@
 # Phase 05 - Confidence, Risk State and Events
 
-**Status:** NOT_STARTED  
+**Status:** READY_TO_START  
 **Depends on:** Phase 04
+
+Phase 04B's YOLO26 research comparator was rejected at the accuracy gate. Phase
+05 therefore starts from the classical guarded TTC candidate (`macro F1
+0.5634`, composite `39.71`, compute P95 `54.40 ms`) without a YOLO runtime
+dependency.
 
 ## Mục tiêu
 
@@ -31,4 +36,3 @@ Biến TTC stream thành output sản phẩm ổn định và có thể giải t
 ## Exit criteria
 
 - Event output đủ dùng cho dashboard/report mà không cần đọc lại raw model state.
-

@@ -373,3 +373,19 @@ Update proposal pages 14-15, 28, and 33:
 - Updated metric benchmark Markdown.
 - Updated proposal claims based on measured evidence.
 
+## Measured outcome — 2026-07-28
+
+Phase 04B is closed with a **reject** decision.
+
+- All 23 critical T03 rows were reviewed: 16 association failures, seven
+  stereo-noise components, and no genuine detector misses.
+- A symmetric containment correction improved the best global macro F1 from
+  `0.5634` to `0.5745` without worsening critical-TTC MAE.
+- Only five of six LOTO folds were feasible; partial LOTO F1 was `0.5286`,
+  T03 recall was `0.241`, and T05 remained at 45 false positives.
+- The per-trip oracle ceiling was `0.5745`, below the `0.60` promotion gate.
+
+The frozen accuracy stop rule therefore terminated TensorRT, INT8, official
+latency, and fine-tuning work for this candidate. Guardian proceeds to Phase 05
+using the classical guarded TTC pipeline. See
+`ai_cv/phases/02_detection_tracking/artifacts/yolo26_loto_association_v2/PHASE04B_FINAL_DECISION.md`.

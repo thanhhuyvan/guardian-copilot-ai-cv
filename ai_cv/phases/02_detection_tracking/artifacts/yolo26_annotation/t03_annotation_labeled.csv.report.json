@@ -1,0 +1,23 @@
+{
+  "rows_total": 377,
+  "rows_labeled": 23,
+  "rows_unlabeled": 354,
+  "coverage": 0.061,
+  "label_counts_overall": {
+    "association_failure": 16,
+    "stereo_noise": 7
+  },
+  "label_counts_s1_gt_danger": {
+    "association_failure": 16,
+    "stereo_noise": 7
+  },
+  "label_counts_s2_other": {},
+  "winner_overall": "association_failure",
+  "share_overall": 0.6957,
+  "winner_s1": "association_failure",
+  "share_s1": 0.6957,
+  "winner_s2": null,
+  "share_s2": 0.0,
+  "decision_rule": "winner if share >= 40% overall AND in S1 with consistent label; else MIXED (S1 wins priority for the action).",
+  "next_phase_recommendation": "DECISIVE: 'association_failure' dominant overall (70%) and in GT-danger stratum (70%). Improve bbox/track matching -- YOLO sees the object but component-detection IoU/center match fails."
+}

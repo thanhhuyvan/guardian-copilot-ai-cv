@@ -1,0 +1,17 @@
+{
+  "rows_total": 377,
+  "rows_labeled": 0,
+  "rows_unlabeled": 377,
+  "coverage": 0.0,
+  "label_counts_overall": {},
+  "label_counts_s1_gt_danger": {},
+  "label_counts_s2_other": {},
+  "winner_overall": null,
+  "share_overall": 0.0,
+  "winner_s1": null,
+  "share_s1": 0.0,
+  "winner_s2": null,
+  "share_s2": 0.0,
+  "decision_rule": "winner if share >= 40% overall AND in S1 with consistent label; else MIXED (S1 wins priority for the action).",
+  "next_phase_recommendation": "MIXED: overall winner='None' (0%), S1 (GT-danger) winner='None' (0%), S2 winner='None' (0%). S1 (the recall-loss rows) should drive the next-phase decision; treat the S1 dominant label as the action trigger even if the overall majority differs, and inspect the disagreements."
+}

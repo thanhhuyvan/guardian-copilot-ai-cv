@@ -111,3 +111,21 @@ to reject the persistent T05 road/fence track, then improve the T03 depth and
 motion fit. Accept the next change only if macro F1 improves without pushing
 compute P95 to `>=75 ms` or materially worsening the already degraded
 critical-TTC MAE.
+
+## Phase 04B semantic-fusion outcome
+
+A pretrained YOLO26n semantic guard was evaluated after the guarded candidate.
+Manual review of all 23 critical T03 rows found 16 association failures, seven
+stereo-noise components, and no genuine detector miss. A targeted symmetric
+containment correction raised the best global macro F1 from `0.5634` to
+`0.5745` while preserving composite (`40.234`) and critical-TTC MAE
+(`44.806 s`).
+
+The candidate is not promoted. Only five of six LOTO folds were feasible, the
+partial-fold LOTO F1 was `0.5286`, T03 recall was `0.241`, and T05 remained at
+45 false positives. The per-trip oracle upper bound was also only `0.5745`,
+below the frozen `0.60` target. TensorRT and further latency optimization were
+therefore stopped at the earlier accuracy gate.
+
+Full evidence:
+[`PHASE04B_FINAL_DECISION.md`](../../02_detection_tracking/artifacts/yolo26_loto_association_v2/PHASE04B_FINAL_DECISION.md).

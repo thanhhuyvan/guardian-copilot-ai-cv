@@ -5,11 +5,23 @@ from __future__ import annotations
 import math
 from collections import deque
 from dataclasses import dataclass, field
-from typing import Deque, Iterable
+from typing import Deque, Iterable, Sequence
 
 import numpy as np
 
 from classical_geometry import ObstacleComponent, collision_corridor_mask
+
+# Optional semantic fusion — imported lazily so the none-backend path has
+# zero dependency on YOLO / Ultralytics at import time.
+try:
+    from detector_interfaces import Detection
+    from semantic_fusion import (
+        TemporalSemanticState,
+        associate_component_with_detections,
+    )
+    _SEMANTIC_AVAILABLE = True
+except ImportError:  # pragma: no cover — only absent in stripped environments
+    _SEMANTIC_AVAILABLE = False
 
 
 @dataclass(frozen=True)
@@ -34,6 +46,47 @@ class ComponentTrack:
     hits: int = 0
     age: int = 0
     missed: int = 0
+    # Semantic state — None when semantic detector is 'none' (bit-identical path).
+    semantic_state: "TemporalSemanticState | None" = field(default=None, repr=False)
+
+    def enable_semantic(self) -> None:
+        """Activate per-track semantic state (call once after construction when detector != none)."""
+        if _SEMANTIC_AVAILABLE and self.semantic_state is None:
+            self.semantic_state = TemporalSemanticState()
+
+    def update_semantic(
+        self,
+        detections: "Sequence[Detection]",
+        image_shape: tuple[int, int],
+    ) -> None:
+        """Associate current bbox with YOLO detections and update EMA score.
+
+        No-op when semantic state is disabled (none backend).
+        """
+        if self.semantic_state is None or not _SEMANTIC_AVAILABLE:
+            return
+        assoc = associate_component_with_detections(self.bbox, detections, image_shape)
+        self.semantic_state.update(assoc)
+
+    def is_semantically_suppressed(
+        self,
+        *,
+        score_threshold: float = 0.25,
+        max_misses: int = 3,
+        fallback_depth_m: float = 5.0,
+    ) -> bool:
+        """Return True only when soft-guard conditions all hold.
+
+        Always False when semantic state is disabled (none backend bit-parity).
+        """
+        if self.semantic_state is None:
+            return False
+        return self.semantic_state.is_suppressed(
+            latest_depth_m=self.latest.depth_m,
+            score_threshold=score_threshold,
+            max_misses=max_misses,
+            fallback_depth_m=fallback_depth_m,
+        )
 
     def update(
         self,
@@ -145,12 +198,23 @@ class ComponentTracker:
         risk_bottom_width_fraction: float = 0.55,
         minimum_bottom_fraction: float = 0.0,
         minimum_height_fraction: float = 0.0,
+        # Semantic fusion — None disables it entirely (none backend, bit-identical output).
+        semantic_score_threshold: float | None = None,
+        semantic_max_misses: int = 3,
+        semantic_fallback_depth_m: float = 5.0,
     ) -> None:
         self.image_shape = image_shape
         self.depth_attribute = depth_attribute
         self.maximum_missed = maximum_missed
         self.minimum_bottom_fraction = minimum_bottom_fraction
         self.minimum_height_fraction = minimum_height_fraction
+        # Semantic fusion config — all None means disabled.
+        self._semantic_enabled = (
+            semantic_score_threshold is not None and _SEMANTIC_AVAILABLE
+        )
+        self._semantic_score_threshold = semantic_score_threshold or 0.25
+        self._semantic_max_misses = semantic_max_misses
+        self._semantic_fallback_depth_m = semantic_fallback_depth_m
         self.tracks: dict[int, ComponentTrack] = {}
         self.next_track_id = 1
         self._risk_corridor = collision_corridor_mask(
@@ -192,8 +256,21 @@ class ComponentTracker:
         self,
         components: Iterable[ObstacleComponent],
         timestamp: float,
+        detections: "Sequence[Detection] | None" = None,
     ) -> list[ComponentTrack]:
+        """Update tracks with new obstacle components.
+
+        Args:
+            components: Obstacle components from the current stereo frame.
+            timestamp: Frame timestamp in seconds.
+            detections: Optional YOLO detections for this frame. Pass None (or
+                omit) when using the ``none`` backend — this preserves
+                bit-identical output with the pre-semantic pipeline.
+        """
         components = list(components)
+        # Semantic: use empty list when detections omitted — treated as all-miss.
+        frame_dets: Sequence[Detection] = detections if detections is not None else []
+
         candidates = []
         for track_id, track in self.tracks.items():
             for component_index, component in enumerate(components):
@@ -229,14 +306,38 @@ class ComponentTracker:
                 bbox=component.bbox,
             )
             track.update(component, timestamp, self._depth(component))
+            if self._semantic_enabled:
+                track.enable_semantic()
             self.tracks[track.track_id] = track
             self.next_track_id += 1
+
+        # Update semantic state for all active tracks this frame.
+        # When semantic is disabled, update_semantic() is a no-op — no change
+        # to TTC output, preserving bit-identical none-backend behaviour.
+        if self._semantic_enabled:
+            for track in self.tracks.values():
+                if track.missed == 0:
+                    track.update_semantic(frame_dets, self.image_shape)
+                # Missed tracks still accumulate consecutive_misses via EMA decay
+                # (matched_confidence=0 path), handled inside TemporalSemanticState.update.
+                elif track.semantic_state is not None:
+                    from semantic_fusion import SemanticAssociation
+                    track.semantic_state.update(SemanticAssociation(matched=False))
 
         return [
             track
             for track in self.tracks.values()
             if track.missed == 0
         ]
+
+    def reset(self) -> None:
+        """Reset all tracker state between trips.
+
+        Clears all active tracks (including their semantic states) and resets
+        the track ID counter so successive trip runs are fully independent.
+        """
+        self.tracks.clear()
+        self.next_track_id = 1
 
     def risk_tracks(self, tracks: Iterable[ComponentTrack]) -> list[ComponentTrack]:
         height, width = self.image_shape
@@ -264,6 +365,13 @@ def select_minimum_ttc(
     maximum_closing_speed_mps: float = 40.0,
     maximum_depth_m: float = math.inf,
     maximum_motion_residual_m: float = math.inf,
+    # Semantic soft-guard — only active when ComponentTracker was initialised
+    # with semantic_score_threshold != None.  Defaults keep none-backend
+    # bit-identical (is_semantically_suppressed() returns False when
+    # semantic_state is None).
+    semantic_score_threshold: float = 0.25,
+    semantic_max_misses: int = 3,
+    semantic_fallback_depth_m: float = 5.0,
 ) -> tuple[float, int | None, float, float]:
     best = (math.inf, None, 0.0, 0.0)
     for track in tracks:
@@ -276,6 +384,15 @@ def select_minimum_ttc(
         if track.latest.depth_m > maximum_depth_m:
             continue
         if residual > maximum_motion_residual_m:
+            continue
+        # Semantic soft-guard: skip this candidate if suppressed.
+        # When semantic_state is None (none backend), this is always False —
+        # output is bit-identical to the pre-semantic pipeline.
+        if track.is_semantically_suppressed(
+            score_threshold=semantic_score_threshold,
+            max_misses=semantic_max_misses,
+            fallback_depth_m=semantic_fallback_depth_m,
+        ):
             continue
         if ttc < best[0]:
             best = (ttc, track.track_id, confidence, closing_speed)

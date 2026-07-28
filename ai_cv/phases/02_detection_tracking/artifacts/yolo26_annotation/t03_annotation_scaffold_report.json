@@ -1,0 +1,42 @@
+{
+  "trip_id": "T03-Sample",
+  "annotation_config": {
+    "semantic_score_threshold": 0.2,
+    "consecutive_misses": 2,
+    "close_fallback_depth_m": 5.0
+  },
+  "danger_ttc_threshold_s": 2.0,
+  "sampling_rule": {
+    "S1": "all GT-danger frames (< danger_ttc_s) with >=1 suppressed candidate",
+    "S2": "remaining suppressed-only frames, uniform-strided to budget",
+    "max_frames": 240
+  },
+  "counts": {
+    "suppressed_candidates_total": 798,
+    "suppressed_candidates_on_sampled_frames": 377,
+    "candidate_rows_in_track_csv": 1355,
+    "frames_total_t03_gt_danger": 29,
+    "frames_suppressed": 505,
+    "frames_sampled_S1": 19,
+    "frames_sampled_S2": 221,
+    "frames_sampled_total": 240,
+    "overlays_rendered": 240,
+    "overlays_missing_src": 0
+  },
+  "label_codes": {
+    "genuine_miss": "the suppressed candidate IS a real road user that YOLO failed to detect -> fine-tune YOLO26",
+    "stereo_noise": "the suppressed candidate is NOT a real object, just stereo/depth noise -> improve stereo confidence/fusion",
+    "association_failure": "YOLO did detect the object but the component-detection match failed (IoU/center) -> improve bbox/track matching",
+    "unsure": "ambiguous or needs more context"
+  },
+  "outputs": {
+    "label_template": "ai_cv\\phases\\02_detection_tracking\\artifacts\\yolo26_annotation\\t03_annotation_template.csv",
+    "overlays_dir": "ai_cv\\phases\\02_detection_tracking\\artifacts\\yolo26_annotation\\overlays",
+    "label_matcher_columns": [
+      "overlay_box_index",
+      "track_id"
+    ],
+    "overlay_box_label_format": "#{overlay_box_index} tid={track_id} d=... TTC=... GT=...",
+    "next_step_validator": "src/validate_t03_annotation.py --csv <label_template>"
+  }
+}
