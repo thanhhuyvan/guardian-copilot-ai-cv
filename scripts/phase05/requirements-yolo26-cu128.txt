@@ -1,0 +1,13 @@
+# Phase 05 live detector-owned benchmark lock.
+# Install with Python 3.12 on Windows; CUDA wheels resolve from PyTorch's index.
+--extra-index-url https://download.pytorch.org/whl/cu128
+
+numpy==2.5.1
+onnxruntime-gpu==1.20.1
+opencv-python==5.0.0.93
+pandas==3.0.5
+psutil==7.2.2
+nvidia-ml-py==13.610.43
+torch==2.11.0+cu128
+torchvision==0.26.0+cu128
+ultralytics==8.4.106

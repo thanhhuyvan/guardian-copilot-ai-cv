@@ -5,9 +5,9 @@
 
 Phase 05 starts from the classical guarded TTC candidate (`macro F1 0.5634`,
 composite `39.71`, compute P95 `54.40 ms`) as its safe fallback. A new
-detector-owned depth/TTC ablation reaches macro F1 `0.618` and composite
-`42.4`, but is not yet the default because T02 regresses and live YOLO latency
-has not been measured. See
+detector-owned depth/TTC ablation reaches macro F1 `0.632`, composite `42.8`,
+and live compute P95 `63.22 ms`, but is not yet the sole default because T01
+and T02 regress. See
 [`artifacts/DETECTOR_OWNED_TTC_ABLATION.md`](artifacts/DETECTOR_OWNED_TTC_ABLATION.md).
 
 The research basis and fixed first ablation are documented in

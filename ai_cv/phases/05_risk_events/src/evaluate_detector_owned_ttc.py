@@ -17,6 +17,8 @@ import csv
 import json
 import math
 import sys
+import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict
 from pathlib import Path
 from typing import Iterable
@@ -149,8 +151,34 @@ def _write_predictions(path: Path, rows: Iterable[dict[str, object]]) -> None:
         writer.writerows(rows)
 
 
+def _write_runtime_rows(path: Path, rows: list[dict[str, object]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if not rows:
+        return
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
+        writer.writeheader()
+        writer.writerows(rows)
+
+
 def _ttc_text(value: float) -> str:
     return "inf" if not math.isfinite(value) else f"{value:.6f}"
+
+
+def _prediction_equal(first: float, second: float) -> bool:
+    if math.isinf(first) and math.isinf(second):
+        return True
+    return first == second
+
+
+def _latency_summary(values: list[float]) -> dict[str, float]:
+    array = np.asarray(values, dtype=np.float64)
+    return {
+        "p50": float(np.percentile(array, 50)),
+        "p95": float(np.percentile(array, 95)),
+        "p99": float(np.percentile(array, 99)),
+        "mean": float(np.mean(array)),
+    }
 
 
 def run(args: argparse.Namespace) -> dict[str, object]:
@@ -165,8 +193,45 @@ def run(args: argparse.Namespace) -> dict[str, object]:
         opencv_threads=args.opencv_threads,
         stereo_workers=args.stereo_workers,
     )
+    detector = None
+    gpu_sampler = None
+    if args.detector_backend != "cached":
+        from benchmark_stereo_latency import ProcessGpuMemorySampler
+        from yolo26_backends import get_detector_backend
+
+        detector = get_detector_backend(
+            args.detector_backend,
+            str(args.model_path),
+            args.detector_confidence,
+        )
+        gpu_sampler = ProcessGpuMemorySampler(0)
+        gpu_sampler.start()
+    executor = (
+        ThreadPoolExecutor(max_workers=2, thread_name_prefix="guardian-live")
+        if detector is not None and args.parallel_inference
+        else None
+    )
     report: dict[str, object] = {
         "experiment": "phase05a_detector_owned_ttc",
+        "detector": {
+            "backend": args.detector_backend,
+            "model_path": str(args.model_path) if detector is not None else None,
+            "model_sha256": (
+                getattr(detector, "model_sha256", None)
+                if detector is not None
+                else None
+            ),
+            "confidence_threshold": args.detector_confidence,
+            "parallel_with_stereo": bool(executor is not None),
+        },
+        "protocol": {
+            "warmup_frames": args.warmup_frames,
+            "repeats": args.repeats,
+            "start_frame_index": args.start_frame_index,
+            "max_frames_per_trip": args.max_frames_per_trip,
+            "latency_target_ms": args.latency_target_ms,
+            "disk_loading_excluded_from_gate": True,
+        },
         "policies": {
             "detector_owned": {
                 "maximum_closing_speed_mps": 20.0,
@@ -177,7 +242,35 @@ def run(args: argparse.Namespace) -> dict[str, object]:
         },
         "trips": {},
     }
+    runtime_rows: list[dict[str, object]] = []
+    nondeterministic_predictions = 0
+    prediction_comparisons = 0
+    gpu_memory: dict[str, float] | None = None
     try:
+        if detector is not None and args.warmup_frames:
+            warmup_dataset = TripDataset(args.practice_root / args.trips[0])
+            warmup_records = list(warmup_dataset.iter_frames())
+            for index in range(args.warmup_frames):
+                frame = warmup_records[index % len(warmup_records)]
+                left = warmup_dataset.load_left(frame.frame_id)
+                right = warmup_dataset.load_right(frame.frame_id)
+                if executor is not None:
+                    stereo_future = executor.submit(backend.infer, left, right)
+                    detector_future = executor.submit(detector.infer, left)
+                    stereo_future.result()
+                    detector_future.result()
+                else:
+                    backend.infer(left, right)
+                    detector.infer(left)
+            try:
+                import torch
+
+                if torch.cuda.is_available():
+                    torch.cuda.synchronize()
+                    torch.cuda.reset_peak_memory_stats()
+            except ImportError:
+                pass
+
         for trip_id in args.trips:
             dataset = TripDataset(args.practice_root / trip_id)
             calibration = dataset.load_calibration()
@@ -192,17 +285,10 @@ def run(args: argparse.Namespace) -> dict[str, object]:
                 top_width_fraction=0.10,
                 bottom_width_fraction=0.50,
             )
-            detections_by_frame = load_detections_csv(
-                args.detections_dir / f"{trip_id}.csv"
-            )
-            tracker = ComponentTracker(
-                image_shape,
-                depth_attribute="object_depth_m",
-                maximum_missed=3,
-                risk_top_width_fraction=0.10,
-                risk_bottom_width_fraction=0.50,
-                minimum_bottom_fraction=0.45,
-                minimum_height_fraction=0.025,
+            detections_by_frame = (
+                load_detections_csv(args.detections_dir / f"{trip_id}.csv")
+                if detector is None
+                else {}
             )
             policies = {
                 "detector_owned": [],
@@ -215,66 +301,174 @@ def run(args: argparse.Namespace) -> dict[str, object]:
                 "frames_with_depth_component": 0,
                 "frames_with_risk_track": 0,
             }
-            for index, frame in enumerate(dataset.iter_frames()):
-                left = dataset.load_left(frame.frame_id)
-                right = dataset.load_right(frame.frame_id)
-                stereo = backend.infer(left, right)
-                ground_model, _ = estimate_ground_model(stereo.disparity_px)
-                ground_confidence = (
-                    float(ground_model.confidence)
-                    if ground_model is not None
-                    else 0.0
+            frames = list(dataset.iter_frames())
+            if args.start_frame_index:
+                frames = frames[args.start_frame_index :]
+            if args.max_frames_per_trip is not None:
+                frames = frames[: args.max_frames_per_trip]
+            for repeat_index in range(args.repeats):
+                tracker = ComponentTracker(
+                    image_shape,
+                    depth_attribute="object_depth_m",
+                    maximum_missed=3,
+                    risk_top_width_fraction=0.10,
+                    risk_bottom_width_fraction=0.50,
+                    minimum_bottom_fraction=0.45,
+                    minimum_height_fraction=0.025,
                 )
-                detections = detections_by_frame.get(int(frame.frame_id), [])
-                stats["detections"] += len(detections)
-                components = [
-                    component
-                    for component_id, detection in enumerate(detections, start=1)
-                    if (
-                        component := detection_component(
-                            detection,
-                            stereo.disparity_px,
-                            stereo.valid_mask,
-                            focal_length_px,
-                            baseline_m,
-                            corridor,
-                            component_id=component_id,
+                for index, frame in enumerate(frames):
+                    load_started = time.perf_counter()
+                    left = dataset.load_left(frame.frame_id)
+                    right = dataset.load_right(frame.frame_id)
+                    image_load_ms = (time.perf_counter() - load_started) * 1000.0
+                    pipeline_started = time.perf_counter()
+                    inference_started = time.perf_counter()
+                    if executor is not None:
+                        stereo_future = executor.submit(backend.infer, left, right)
+                        detector_future = executor.submit(detector.infer, left)
+                        stereo = stereo_future.result()
+                        detection_result = detector_future.result()
+                    else:
+                        stereo = backend.infer(left, right)
+                        detection_result = (
+                            detector.infer(left) if detector is not None else None
                         )
+                    inference_wall_ms = (
+                        time.perf_counter() - inference_started
+                    ) * 1000.0
+                    detections = (
+                        list(detection_result.detections)
+                        if detection_result is not None
+                        else detections_by_frame.get(int(frame.frame_id), [])
                     )
-                    is not None
-                ]
-                stats["depth_valid_components"] += len(components)
-                stats["frames_with_depth_component"] += int(bool(components))
-                tracks = tracker.update(components, float(frame.timestamp))
-                risk_tracks = tracker.risk_tracks(tracks)
-                stats["frames_with_risk_track"] += int(bool(risk_tracks))
 
-                common = {
-                    "minimum_track_confidence": 0.65,
-                    "maximum_depth_m": 20.0,
-                    "maximum_motion_residual_m": 0.8,
-                }
-                plain_ttc, _, _, _ = select_minimum_ttc(
-                    risk_tracks,
-                    ground_confidence,
-                    maximum_closing_speed_mps=20.0,
-                    **common,
-                )
-                ego_cap = min(20.0, max(3.0, float(frame.speed_kmh) / 3.6 + 3.0))
-                capped_ttc, _, _, _ = select_minimum_ttc(
-                    risk_tracks,
-                    ground_confidence,
-                    maximum_closing_speed_mps=ego_cap,
-                    **common,
-                )
-                policies["detector_owned"].append(float(plain_ttc))
-                policies["detector_owned_ego_cap"].append(float(capped_ttc))
-                truth.append(float(frame.min_ttc))
-                if args.progress_every and (
-                    (index + 1) % args.progress_every == 0
-                    or index + 1 == len(dataset)
-                ):
-                    print(f"{trip_id}: {index + 1}/{len(dataset)}", flush=True)
+                    postprocess_started = time.perf_counter()
+                    ground_model, _ = estimate_ground_model(stereo.disparity_px)
+                    ground_confidence = (
+                        float(ground_model.confidence)
+                        if ground_model is not None
+                        else 0.0
+                    )
+                    components = [
+                        component
+                        for component_id, detection in enumerate(
+                            detections, start=1
+                        )
+                        if (
+                            component := detection_component(
+                                detection,
+                                stereo.disparity_px,
+                                stereo.valid_mask,
+                                focal_length_px,
+                                baseline_m,
+                                corridor,
+                                component_id=component_id,
+                            )
+                        )
+                        is not None
+                    ]
+                    tracks = tracker.update(components, float(frame.timestamp))
+                    risk_tracks = tracker.risk_tracks(tracks)
+                    common = {
+                        "minimum_track_confidence": 0.65,
+                        "maximum_depth_m": 20.0,
+                        "maximum_motion_residual_m": 0.8,
+                    }
+                    plain_ttc, _, _, _ = select_minimum_ttc(
+                        risk_tracks,
+                        ground_confidence,
+                        maximum_closing_speed_mps=20.0,
+                        **common,
+                    )
+                    ego_cap = min(
+                        20.0,
+                        max(3.0, float(frame.speed_kmh) / 3.6 + 3.0),
+                    )
+                    capped_ttc, _, _, _ = select_minimum_ttc(
+                        risk_tracks,
+                        ground_confidence,
+                        maximum_closing_speed_mps=ego_cap,
+                        **common,
+                    )
+                    postprocess_ms = (
+                        time.perf_counter() - postprocess_started
+                    ) * 1000.0
+                    pipeline_compute_ms = (
+                        time.perf_counter() - pipeline_started
+                    ) * 1000.0
+                    detector_preprocess_ms = (
+                        detection_result.preprocess_ms
+                        if detection_result is not None
+                        else 0.0
+                    )
+                    detector_inference_ms = (
+                        detection_result.inference_ms
+                        if detection_result is not None
+                        else 0.0
+                    )
+                    detector_postprocess_ms = (
+                        detection_result.postprocess_ms
+                        if detection_result is not None
+                        else 0.0
+                    )
+                    runtime_rows.append(
+                        {
+                            "repeat": repeat_index + 1,
+                            "trip_id": trip_id,
+                            "frame_id": int(frame.frame_id),
+                            "image_load_ms": image_load_ms,
+                            "inference_wall_ms": inference_wall_ms,
+                            "stereo_ms": float(
+                                stereo.timings_ms.get(
+                                    "stereo_total",
+                                    sum(stereo.timings_ms.values()),
+                                )
+                            ),
+                            "detector_preprocess_ms": detector_preprocess_ms,
+                            "detector_inference_ms": detector_inference_ms,
+                            "detector_postprocess_ms": detector_postprocess_ms,
+                            "postprocess_ttc_ms": postprocess_ms,
+                            "pipeline_compute_ms": pipeline_compute_ms,
+                            "detections": len(detections),
+                            "depth_valid_components": len(components),
+                            "risk_tracks": len(risk_tracks),
+                        }
+                    )
+                    if repeat_index == 0:
+                        stats["detections"] += len(detections)
+                        stats["depth_valid_components"] += len(components)
+                        stats["frames_with_depth_component"] += int(
+                            bool(components)
+                        )
+                        stats["frames_with_risk_track"] += int(bool(risk_tracks))
+                        policies["detector_owned"].append(float(plain_ttc))
+                        policies["detector_owned_ego_cap"].append(
+                            float(capped_ttc)
+                        )
+                        truth.append(float(frame.min_ttc))
+                    else:
+                        prediction_comparisons += 2
+                        nondeterministic_predictions += int(
+                            not _prediction_equal(
+                                policies["detector_owned"][index],
+                                float(plain_ttc),
+                            )
+                        )
+                        nondeterministic_predictions += int(
+                            not _prediction_equal(
+                                policies["detector_owned_ego_cap"][index],
+                                float(capped_ttc),
+                            )
+                        )
+                    if args.progress_every and (
+                        (index + 1) % args.progress_every == 0
+                        or index + 1 == len(dataset)
+                    ):
+                        print(
+                            f"repeat {repeat_index + 1}/{args.repeats} "
+                            f"{trip_id}: {index + 1}/{len(dataset)}",
+                            flush=True,
+                        )
 
             trip_report: dict[str, object] = {"coverage": stats, "metrics": {}}
             truth_array = np.asarray(truth, dtype=float)
@@ -288,17 +482,84 @@ def run(args: argparse.Namespace) -> dict[str, object]:
                         "predicted_ttc": _ttc_text(prediction),
                     }
                     for frame, prediction in zip(
-                        dataset.iter_frames(), predictions, strict=True
+                        frames, predictions, strict=True
                     )
                 ]
                 _write_predictions(
                     args.output_dir / policy_name / f"{trip_id}.csv", rows
                 )
             report["trips"][trip_id] = trip_report
+        if detector is not None:
+            try:
+                import torch
+
+                if torch.cuda.is_available():
+                    torch.cuda.synchronize()
+                    gpu_memory = {
+                        "peak_allocated_mb": float(
+                            torch.cuda.max_memory_allocated() / (1024**2)
+                        ),
+                        "peak_reserved_mb": float(
+                            torch.cuda.max_memory_reserved() / (1024**2)
+                        ),
+                        "process_peak_mb": (
+                            gpu_sampler.stop()
+                            if gpu_sampler is not None
+                            else None
+                        ),
+                        "process_peak_source": (
+                            gpu_sampler.source
+                            if gpu_sampler is not None
+                            else None
+                        ),
+                    }
+                    gpu_sampler = None
+            except ImportError:
+                pass
     finally:
+        if gpu_sampler is not None:
+            gpu_sampler.stop()
+        if executor is not None:
+            executor.shutdown(wait=True)
+        if detector is not None:
+            detector.close()
         backend.close()
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
+    _write_runtime_rows(args.output_dir / "runtime_frames.csv", runtime_rows)
+    live_latency = [
+        float(row["pipeline_compute_ms"]) for row in runtime_rows
+    ]
+    report["latency_ms"] = {
+        "pipeline_compute": _latency_summary(live_latency),
+        "inference_wall": _latency_summary(
+            [float(row["inference_wall_ms"]) for row in runtime_rows]
+        ),
+        "stereo": _latency_summary(
+            [float(row["stereo_ms"]) for row in runtime_rows]
+        ),
+        "detector_inference": _latency_summary(
+            [float(row["detector_inference_ms"]) for row in runtime_rows]
+        ),
+        "postprocess_ttc": _latency_summary(
+            [float(row["postprocess_ttc_ms"]) for row in runtime_rows]
+        ),
+    }
+    report["latency_gate"] = {
+        "target_p95_ms": args.latency_target_ms,
+        "observed_p95_ms": report["latency_ms"]["pipeline_compute"]["p95"],
+        "passed": (
+            report["latency_ms"]["pipeline_compute"]["p95"]
+            <= args.latency_target_ms
+        ),
+        "valid_for_deployment": detector is not None,
+    }
+    report["repeat_determinism"] = {
+        "comparisons": prediction_comparisons,
+        "prediction_mismatches": nondeterministic_predictions,
+        "passed": nondeterministic_predictions == 0,
+    }
+    report["gpu_memory"] = gpu_memory
     report_path = args.output_dir / "detector_owned_report.json"
     report_path.write_text(
         json.dumps(report, indent=2, sort_keys=True), encoding="utf-8"
@@ -331,6 +592,23 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--trips", nargs="+", default=["T03-Sample", "T05-Sample"]
     )
+    parser.add_argument(
+        "--detector-backend",
+        choices=["cached", "yolo26-pytorch", "yolo26-onnx"],
+        default="cached",
+    )
+    parser.add_argument("--model-path", type=Path, default=Path("yolo26n.pt"))
+    parser.add_argument("--detector-confidence", type=float, default=0.25)
+    parser.add_argument(
+        "--parallel-inference",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+    )
+    parser.add_argument("--warmup-frames", type=int, default=20)
+    parser.add_argument("--repeats", type=int, default=1)
+    parser.add_argument("--start-frame-index", type=int, default=0)
+    parser.add_argument("--max-frames-per-trip", type=int)
+    parser.add_argument("--latency-target-ms", type=float, default=75.0)
     parser.add_argument("--opencv-threads", type=int, default=6)
     parser.add_argument("--stereo-workers", type=int, default=1)
     parser.add_argument("--progress-every", type=int, default=100)

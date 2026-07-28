@@ -18,9 +18,10 @@ confidence-based selection and live detector latency pass their gates.
 | T05 false positives | 45 |
 | Compute P95 | 54.40 ms |
 
-The detector-owned candidate improved the official six-trip macro F1 to
-`0.618` and composite to `42.4`, but T02 regressed from `0.765` to `0.375`.
-See `artifacts/DETECTOR_OWNED_TTC_ABLATION.md`. This rules out a universal
+The live detector-owned candidate improved the official six-trip macro F1 to
+`0.632` and composite to `42.8`, with compute P95 `63.22 ms`. T01 and T02
+still regress versus the fallback. See
+`artifacts/DETECTOR_OWNED_TTC_ABLATION.md`. This rules out a universal
 replacement and motivates a causal confidence/fusion decision in this phase.
 
 Phase 04B's semantic comparator was rejected because its best oracle F1 was
