@@ -364,9 +364,9 @@ trtexec_path="$(command -v trtexec || true)"
 if [[ -z "$trtexec_path" && -x /usr/src/tensorrt/bin/trtexec ]]; then
     trtexec_path="/usr/src/tensorrt/bin/trtexec"
 fi
-if [[ -n "$trtexec_path" ]] && "$trtexec_path" --version >/dev/null 2>&1; then
+if [[ -n "$trtexec_path" ]] && "$trtexec_path" --help >/dev/null 2>&1; then
     pass "trtexec is available"
-    detail "trtexec" "$trtexec_path" --version || true
+    emit "INFO  trtexec: $("$trtexec_path" --help 2>&1 | sed -n '1p')"
 
     if [[ -x "$openstereo_env/bin/python" ]]; then
         trtexec_smoke_dir="$(mktemp -d)"

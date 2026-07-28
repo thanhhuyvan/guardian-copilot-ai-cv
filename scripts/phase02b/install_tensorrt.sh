@@ -126,7 +126,10 @@ fi
     echo "TensorRT installed but trtexec was not found." >&2
     exit 1
 }
-"$trtexec_path" --version
+# TensorRT 10.8's trtexec has no --version flag.  It prints its version banner
+# while serving --help, which is also a zero-exit availability probe.
+"$trtexec_path" --help >/dev/null
+"$trtexec_path" --help 2>&1 | sed -n '1p'
 
 mkdir -p "$state_root"
 {
