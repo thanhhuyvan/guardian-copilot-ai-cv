@@ -1,0 +1,19 @@
+[
+  {
+    "clip_path": null,
+    "confidence_level": "HIGH",
+    "end_frame": 326,
+    "end_time": 16.3,
+    "event_id": "phase05-T02-Sample-E1",
+    "event_quality": 1.0,
+    "min_ttc_sec": 0.4985,
+    "object_type": "unknown",
+    "run_id": "phase05-T02-Sample",
+    "schema_version": "risk_event.v1",
+    "severity": "CRITICAL",
+    "start_frame": 311,
+    "start_time": 15.55,
+    "track_id": 0,
+    "trip_id": "T02-Sample"
+  }
+]

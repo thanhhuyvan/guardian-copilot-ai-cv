@@ -1,0 +1,36 @@
+[
+  {
+    "clip_path": null,
+    "confidence_level": "HIGH",
+    "end_frame": 148,
+    "end_time": 7.4,
+    "event_id": "phase05-T06-Sample-E1",
+    "event_quality": 1.0,
+    "min_ttc_sec": 0.3378,
+    "object_type": "unknown",
+    "run_id": "phase05-T06-Sample",
+    "schema_version": "risk_event.v1",
+    "severity": "CRITICAL",
+    "start_frame": 128,
+    "start_time": 6.4,
+    "track_id": 0,
+    "trip_id": "T06-Sample"
+  },
+  {
+    "clip_path": null,
+    "confidence_level": "HIGH",
+    "end_frame": 497,
+    "end_time": 24.85,
+    "event_id": "phase05-T06-Sample-E2",
+    "event_quality": 1.0,
+    "min_ttc_sec": 1.071,
+    "object_type": "unknown",
+    "run_id": "phase05-T06-Sample",
+    "schema_version": "risk_event.v1",
+    "severity": "CRITICAL",
+    "start_frame": 464,
+    "start_time": 23.200000000000003,
+    "track_id": 0,
+    "trip_id": "T06-Sample"
+  }
+]

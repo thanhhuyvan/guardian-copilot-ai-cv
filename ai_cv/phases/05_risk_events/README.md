@@ -16,6 +16,12 @@ The learned router was rejected (`F1 0.488`). A parameter-free conservative
 union reaches `F1 0.658`, but remains an event-layer candidate because T01
 false positives increase substantially.
 
+The deterministic event layer is implemented and evaluated in
+[`artifacts/event_evaluation/RISK_EVENT_EVALUATION.md`](artifacts/event_evaluation/RISK_EVENT_EVALUATION.md).
+It removes fragmentation and doubles macro event precision to `0.722` without
+reducing event recall, but correctly records that sustained T01/T05 false-alert
+duration remains unresolved.
+
 The research basis and fixed first ablation are documented in
 [`notes/PAPER_RESEARCH.md`](notes/PAPER_RESEARCH.md).
 

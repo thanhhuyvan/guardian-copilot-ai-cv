@@ -1,8 +1,7 @@
 # Verify - Phase 05
 
-- [ ] Stream/event schema hợp lệ.
-- [ ] Không flicker quanh threshold.
-- [ ] Frame count và event count tách biệt.
-- [ ] Clip có pre/post context.
-- [ ] Integration owner đọc được output.
-
+- [x] Stream/event schema is valid.
+- [x] No flicker around thresholds.
+- [x] Frame count and event count are reported separately.
+- [ ] Clips contain pre/post context.
+- [ ] Integration owner can consume the output.

@@ -30,6 +30,12 @@ but T01 regressed to `0.292`; use it only as an input to event hysteresis until
 false-event duration is validated. See
 `artifacts/CONFIDENCE_ROUTER_LOTO.md`.
 
+The fixed risk-state/event layer is also complete. Recommended hysteresis
+raises macro event precision from `0.361` to `0.722`, preserves event recall at
+`0.778`, and removes fragmentation. Sustained false-event duration changes
+only from `5.60 s` to `5.40 s`; do not represent debounce as a perception fix.
+See `artifacts/event_evaluation/RISK_EVENT_EVALUATION.md`.
+
 Phase 04B's semantic comparator was rejected because its best oracle F1 was
 only 0.5745 and its full LOTO selection was infeasible.
 
