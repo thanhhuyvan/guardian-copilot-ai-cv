@@ -33,6 +33,26 @@ only 0.5745 and its full LOTO selection was infeasible.
 5. Replay all six practice trips and report event counts, duration, duplicate
    events, missed danger runs, and false-event duration.
 
+## Mini-fold capacity result
+
+An intentional overfit diagnostic was run before implementation:
+
+| Window | Baseline F1 | In-sample F1 | Four-block F1 |
+|---|---:|---:|---:|
+| T03 frames 280–360 | 0.432 | 0.906 | 0.627 |
+| T05 frames 430–580 | 0.247 | 1.000 | 0.426 |
+
+Frame ID, timestamp, trip identity, and ground truth were excluded from model
+inputs. The held-out predictions used four contiguous blocks.
+
+Decision:
+
+- T03 has useful causal signal in component count, height/width, depth, and
+  closing speed. Implement a small physics-based ablation.
+- T05's local features can memorize the episode and suppress many false
+  positives, but blocked recall remains unchanged. Add object-centric
+  depth/motion measurements instead of a larger classifier.
+
 ## Promotion rule
 
 Phase 05 may improve alert stability, but it must not silently relabel the

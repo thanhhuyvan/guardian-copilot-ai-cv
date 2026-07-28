@@ -11,6 +11,11 @@ dependency.
 The research basis and fixed first ablation are documented in
 [`notes/PAPER_RESEARCH.md`](notes/PAPER_RESEARCH.md).
 
+The intentional mini-fold capacity test is documented in
+[`artifacts/minifold_overfit/MINIFOLD_CAPACITY_REPORT.md`](artifacts/minifold_overfit/MINIFOLD_CAPACITY_REPORT.md).
+T03 shows usable blocked signal (`F1 0.627`), while T05 does not generalize
+enough (`F1 0.426`); do not replace the risk logic with a larger classifier.
+
 ## Mục tiêu
 
 Biến TTC stream thành output sản phẩm ổn định và có thể giải thích.

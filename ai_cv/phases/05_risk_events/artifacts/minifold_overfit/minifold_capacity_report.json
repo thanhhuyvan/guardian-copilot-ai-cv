@@ -1,0 +1,319 @@
+{
+  "schema_version": 1,
+  "purpose": "intentional mini-fold capacity diagnostic; not promotion evidence",
+  "leakage_controls": [
+    "no frame_id feature",
+    "no timestamp feature",
+    "no trip identity feature",
+    "no ground-truth feature",
+    "four contiguous held-out blocks"
+  ],
+  "models": {
+    "in_sample": {
+      "maximum_depth": 8,
+      "minimum_leaf": 1
+    },
+    "blocked": {
+      "folds": 4,
+      "maximum_depth": 3,
+      "minimum_leaf": 5
+    }
+  },
+  "windows": {
+    "T03-Sample": {
+      "first_frame": 280,
+      "last_frame": 360,
+      "frame_count": 81,
+      "danger_frames": 29,
+      "feature_names": [
+        "candidate_count",
+        "finite_ttc_count",
+        "min_candidate_ttc",
+        "min_depth_m",
+        "max_closing_speed_mps",
+        "min_motion_residual_m",
+        "max_confidence",
+        "max_bottom_y_norm",
+        "max_width_norm",
+        "max_height_norm",
+        "max_track_hits",
+        "max_history_length",
+        "max_observation_quality",
+        "min_depth_mad_ratio",
+        "max_lr_support",
+        "max_corridor_overlap",
+        "urgent_ttc",
+        "urgent_depth_m",
+        "urgent_closing_speed_mps",
+        "urgent_motion_residual_m",
+        "urgent_confidence",
+        "urgent_center_offset",
+        "urgent_bottom_y_norm",
+        "urgent_width_norm",
+        "urgent_height_norm",
+        "urgent_track_hits",
+        "urgent_history_length",
+        "urgent_observation_quality",
+        "urgent_depth_mad_ratio",
+        "urgent_lr_support",
+        "urgent_corridor_overlap"
+      ],
+      "baseline_metrics": {
+        "f1": 0.4324324324324324,
+        "precision": 1.0,
+        "recall": 0.27586206896551724,
+        "accuracy": 0.7407407407407407,
+        "tp": 8,
+        "fp": 0,
+        "fn": 21,
+        "tn": 52
+      },
+      "in_sample_metrics": {
+        "f1": 0.9056603773584906,
+        "precision": 1.0,
+        "recall": 0.8275862068965517,
+        "accuracy": 0.9382716049382716,
+        "tp": 24,
+        "fp": 0,
+        "fn": 5,
+        "tn": 52
+      },
+      "blocked_metrics": {
+        "f1": 0.6274509803921569,
+        "precision": 0.7272727272727273,
+        "recall": 0.5517241379310345,
+        "accuracy": 0.7654320987654321,
+        "tp": 16,
+        "fp": 6,
+        "fn": 13,
+        "tn": 46
+      },
+      "in_sample_split_usage": {
+        "candidate_count": 1,
+        "max_closing_speed_mps": 1,
+        "max_confidence": 1,
+        "max_height_norm": 1,
+        "max_width_norm": 1
+      },
+      "blocked_split_usage": {
+        "candidate_count": 4,
+        "max_height_norm": 4,
+        "max_closing_speed_mps": 1,
+        "min_depth_m": 1,
+        "urgent_center_offset": 1,
+        "urgent_depth_m": 1,
+        "urgent_height_norm": 1
+      },
+      "blocked_folds": [
+        {
+          "fold": 1,
+          "first_index": 0,
+          "last_index": 20,
+          "metrics": {
+            "f1": 0.0,
+            "precision": 0.0,
+            "recall": 0.0,
+            "accuracy": 0.8095238095238095,
+            "tp": 0,
+            "fp": 4,
+            "fn": 0,
+            "tn": 17
+          }
+        },
+        {
+          "fold": 2,
+          "first_index": 21,
+          "last_index": 40,
+          "metrics": {
+            "f1": 0.6666666666666666,
+            "precision": 0.7777777777777778,
+            "recall": 0.5833333333333334,
+            "accuracy": 0.65,
+            "tp": 7,
+            "fp": 2,
+            "fn": 5,
+            "tn": 6
+          }
+        },
+        {
+          "fold": 3,
+          "first_index": 41,
+          "last_index": 60,
+          "metrics": {
+            "f1": 0.72,
+            "precision": 1.0,
+            "recall": 0.5625,
+            "accuracy": 0.65,
+            "tp": 9,
+            "fp": 0,
+            "fn": 7,
+            "tn": 4
+          }
+        },
+        {
+          "fold": 4,
+          "first_index": 61,
+          "last_index": 80,
+          "metrics": {
+            "f1": 0.0,
+            "precision": 0.0,
+            "recall": 0.0,
+            "accuracy": 0.95,
+            "tp": 0,
+            "fp": 0,
+            "fn": 1,
+            "tn": 19
+          }
+        }
+      ],
+      "diagnosis": "promising signal; proceed to causal ablation"
+    },
+    "T05-Sample": {
+      "first_frame": 430,
+      "last_frame": 580,
+      "frame_count": 151,
+      "danger_frames": 29,
+      "feature_names": [
+        "candidate_count",
+        "finite_ttc_count",
+        "min_candidate_ttc",
+        "min_depth_m",
+        "max_closing_speed_mps",
+        "min_motion_residual_m",
+        "max_confidence",
+        "max_bottom_y_norm",
+        "max_width_norm",
+        "max_height_norm",
+        "max_track_hits",
+        "max_history_length",
+        "max_observation_quality",
+        "min_depth_mad_ratio",
+        "max_lr_support",
+        "max_corridor_overlap",
+        "urgent_ttc",
+        "urgent_depth_m",
+        "urgent_closing_speed_mps",
+        "urgent_motion_residual_m",
+        "urgent_confidence",
+        "urgent_center_offset",
+        "urgent_bottom_y_norm",
+        "urgent_width_norm",
+        "urgent_height_norm",
+        "urgent_track_hits",
+        "urgent_history_length",
+        "urgent_observation_quality",
+        "urgent_depth_mad_ratio",
+        "urgent_lr_support",
+        "urgent_corridor_overlap"
+      ],
+      "baseline_metrics": {
+        "f1": 0.2469135802469136,
+        "precision": 0.19230769230769232,
+        "recall": 0.3448275862068966,
+        "accuracy": 0.5960264900662252,
+        "tp": 10,
+        "fp": 42,
+        "fn": 19,
+        "tn": 80
+      },
+      "in_sample_metrics": {
+        "f1": 1.0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "accuracy": 1.0,
+        "tp": 29,
+        "fp": 0,
+        "fn": 0,
+        "tn": 122
+      },
+      "blocked_metrics": {
+        "f1": 0.4255319148936171,
+        "precision": 0.5555555555555556,
+        "recall": 0.3448275862068966,
+        "accuracy": 0.8211920529801324,
+        "tp": 10,
+        "fp": 8,
+        "fn": 19,
+        "tn": 114
+      },
+      "in_sample_split_usage": {
+        "min_depth_m": 2,
+        "candidate_count": 1,
+        "max_closing_speed_mps": 1,
+        "min_candidate_ttc": 1
+      },
+      "blocked_split_usage": {
+        "min_depth_m": 6,
+        "max_closing_speed_mps": 3,
+        "min_candidate_ttc": 2,
+        "max_track_hits": 1
+      },
+      "blocked_folds": [
+        {
+          "fold": 1,
+          "first_index": 0,
+          "last_index": 37,
+          "metrics": {
+            "f1": 0.4,
+            "precision": 1.0,
+            "recall": 0.25,
+            "accuracy": 0.6842105263157895,
+            "tp": 4,
+            "fp": 0,
+            "fn": 12,
+            "tn": 22
+          }
+        },
+        {
+          "fold": 2,
+          "first_index": 38,
+          "last_index": 75,
+          "metrics": {
+            "f1": 0.46153846153846156,
+            "precision": 0.46153846153846156,
+            "recall": 0.46153846153846156,
+            "accuracy": 0.631578947368421,
+            "tp": 6,
+            "fp": 7,
+            "fn": 7,
+            "tn": 18
+          }
+        },
+        {
+          "fold": 3,
+          "first_index": 76,
+          "last_index": 113,
+          "metrics": {
+            "f1": 0.0,
+            "precision": 0.0,
+            "recall": 0.0,
+            "accuracy": 1.0,
+            "tp": 0,
+            "fp": 0,
+            "fn": 0,
+            "tn": 38
+          }
+        },
+        {
+          "fold": 4,
+          "first_index": 114,
+          "last_index": 150,
+          "metrics": {
+            "f1": 0.0,
+            "precision": 0.0,
+            "recall": 0.0,
+            "accuracy": 0.972972972972973,
+            "tp": 0,
+            "fp": 1,
+            "fn": 0,
+            "tn": 36
+          }
+        }
+      ],
+      "diagnosis": "local signal, poor blocked generalization"
+    }
+  },
+  "capacity_pass": true,
+  "blocked_pass": false,
+  "conclusion": "The current signals can fit the local windows but do not generalize across contiguous held-out blocks. A larger classifier would likely overfit; implement physics-based object depth/motion features before another selection sweep."
+}
