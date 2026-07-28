@@ -541,6 +541,7 @@ def select_minimum_ttc(
     ground_confidence: float,
     *,
     minimum_track_confidence: float = 0.55,
+    minimum_closing_speed_mps: float = 0.3,
     maximum_closing_speed_mps: float = 40.0,
     maximum_depth_m: float = math.inf,
     maximum_motion_residual_m: float = math.inf,
@@ -569,7 +570,10 @@ def select_minimum_ttc(
             continue
         if track.latest.depth_confidence < minimum_depth_confidence:
             continue
-        if closing_speed > maximum_closing_speed_mps:
+        if (
+            closing_speed < minimum_closing_speed_mps
+            or closing_speed > maximum_closing_speed_mps
+        ):
             continue
         if track.latest.depth_m > maximum_depth_m:
             continue

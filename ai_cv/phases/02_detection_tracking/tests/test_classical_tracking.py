@@ -199,6 +199,23 @@ class TrackingTests(unittest.TestCase):
 
         self.assertTrue(math.isinf(result[0]))
 
+    def test_ttc_selection_rejects_below_minimum_closing_speed(self) -> None:
+        tracker = TRACKING.ComponentTracker((200, 300))
+        for frame_index in range(4):
+            tracks = tracker.update(
+                [component(130, 12.0 - frame_index * 0.2)],
+                frame_index * 0.1,
+            )
+
+        result = TRACKING.select_minimum_ttc(
+            tracker.risk_tracks(tracks),
+            ground_confidence=1.0,
+            minimum_track_confidence=0.0,
+            minimum_closing_speed_mps=3.0,
+        )
+
+        self.assertTrue(math.isinf(result[0]))
+
     def test_uncertainty_filter_tracks_linear_closing_motion(self) -> None:
         tracker = TRACKING.ComponentTracker(
             (200, 300),

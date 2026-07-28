@@ -355,6 +355,13 @@ def run(
     """
     if not 0.0 <= args.minimum_depth_confidence <= 1.0:
         raise ValueError("minimum depth confidence must be in [0, 1]")
+    if (
+        not math.isfinite(args.experimental_classical_minimum_closing_speed_mps)
+        or args.experimental_classical_minimum_closing_speed_mps < 0.3
+    ):
+        raise ValueError(
+            "experimental classical minimum closing speed must be finite and >= 0.3"
+        )
     starter_root = args.starter_root.resolve()
     if str(starter_root) not in sys.path:
         sys.path.insert(0, str(starter_root))
@@ -415,6 +422,9 @@ def run(
             "latency_target_ms": args.latency_target_ms,
             "disk_loading_excluded_from_gate": True,
             "integrated_union_events": args.integrated_union_events,
+            "experimental_classical_minimum_closing_speed_mps": (
+                args.experimental_classical_minimum_closing_speed_mps
+            ),
         },
         "hardware_independent_workload": {
             "detector": detector_workload,
@@ -443,6 +453,9 @@ def run(
                     "reports TTC < 2 s"
                 ),
                 "enabled": args.integrated_union_events,
+                "experimental_classical_minimum_closing_speed_mps": (
+                    args.experimental_classical_minimum_closing_speed_mps
+                ),
             },
             "confidence_temporal": {
                 "enabled": args.confidence_temporal,
@@ -711,6 +724,9 @@ def run(
                             classical_risk_tracks,
                             ground_confidence,
                             minimum_track_confidence=0.75,
+                            minimum_closing_speed_mps=(
+                                args.experimental_classical_minimum_closing_speed_mps
+                            ),
                             maximum_closing_speed_mps=20.0,
                             maximum_depth_m=20.0,
                             maximum_motion_residual_m=0.8,
@@ -827,9 +843,12 @@ def run(
                                 "classical_selection_confidence": float(
                                     classical_confidence
                                 ),
-                                "classical_selected_closing_speed_mps": float(
-                                    classical_closing
-                                ),
+                                    "classical_selected_closing_speed_mps": float(
+                                        classical_closing
+                                    ),
+                                    "experimental_classical_minimum_closing_speed_mps": (
+                                        args.experimental_classical_minimum_closing_speed_mps
+                                    ),
                                 "union_predicted_ttc": _ttc_text(
                                     float(union_ttc)
                                 ),
@@ -1135,6 +1154,16 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--model-path", type=Path, default=Path("yolo26n.pt"))
     parser.add_argument("--detector-confidence", type=float, default=0.25)
+    parser.add_argument(
+        "--experimental-classical-minimum-closing-speed-mps",
+        type=float,
+        default=0.3,
+        help=(
+            "Experimental lower bound for the classical fallback's estimated "
+            "closing speed. Default 0.3 preserves the frozen candidate; any "
+            "other value requires held-out validation."
+        ),
+    )
     parser.add_argument(
         "--parallel-inference",
         action=argparse.BooleanOptionalAction,
