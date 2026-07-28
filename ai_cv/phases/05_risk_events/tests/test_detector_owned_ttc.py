@@ -17,10 +17,24 @@ from classical_geometry import collision_corridor_mask
 from detector_interfaces import Detection
 from evaluate_detector_owned_ttc import (
     _apply_suppressed_ttc_floor,
+    _best_road_user_detection_iou,
     _prefixed_evidence,
     detection_component,
     detection_evidence_json,
 )
+
+
+def test_classical_track_yolo_association_uses_only_road_users() -> None:
+    class Track:
+        bbox = (10, 10, 30, 30)
+
+    detections = [
+        Detection((10.0, 10.0, 30.0, 30.0), 56, "chair", 0.9),
+        Detection((15.0, 10.0, 35.0, 30.0), 2, "car", 0.9),
+    ]
+
+    assert _best_road_user_detection_iou(Track(), detections) == 0.6
+    assert _best_road_user_detection_iou(None, detections) == 0.0
 from diagnose_temporal_depth_consistency import bbox_iou as diagnostic_bbox_iou
 
 

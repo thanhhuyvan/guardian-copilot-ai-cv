@@ -42,7 +42,11 @@ from classical_geometry import (  # noqa: E402
     extract_obstacle_components,
     ground_and_obstacle_masks,
 )
-from classical_tracking import ComponentTracker, select_minimum_ttc  # noqa: E402
+from classical_tracking import (  # noqa: E402
+    ComponentTracker,
+    bbox_iou,
+    select_minimum_ttc,
+)
 from cross_validate_guarded_ttc import score  # noqa: E402
 from cross_validate_yolo26_fusion import load_detections_csv  # noqa: E402
 from detector_interfaces import Detection  # noqa: E402
@@ -224,6 +228,7 @@ def _selected_track_evidence(
             "selected_depth_confidence": "",
             "selected_lr_support": "",
             "selected_history_length": 0,
+            "selected_bbox_xyxy": "",
         }
     _, _, residual = selected.motion_state()
     return {
@@ -236,7 +241,25 @@ def _selected_track_evidence(
         ),
         "selected_lr_support": float(selected.latest.lr_support),
         "selected_history_length": len(selected.observations),
+        "selected_bbox_xyxy": json.dumps(list(map(int, selected.bbox))),
     }
+
+
+def _best_road_user_detection_iou(
+    track: object | None, detections: Iterable[Detection]
+) -> float:
+    """Return the strongest current-frame YOLO association for a track."""
+    if track is None:
+        return 0.0
+    track_box = tuple(map(int, track.bbox))
+    return max(
+        (
+            bbox_iou(track_box, _clip_bbox(detection, (360, 640)) or (0, 0, 0, 0))
+            for detection in detections
+            if detection.class_name.lower() in ROAD_USER_CLASSES
+        ),
+        default=0.0,
+    )
 
 
 def _find_track(tracks: list[object], track_id: int | None) -> object | None:
@@ -391,6 +414,13 @@ def run(
         )
     ):
         raise ValueError("experimental low-ego suppressed TTC must be finite and >= 2")
+    if (
+        not math.isfinite(args.experimental_turn_lateral_accel_mps2)
+        or args.experimental_turn_lateral_accel_mps2 < 0.0
+    ):
+        raise ValueError("experimental turn lateral acceleration must be finite and >= 0")
+    if not 0.0 <= args.experimental_turn_minimum_yolo_iou <= 1.0:
+        raise ValueError("experimental turn YOLO IoU must be in [0, 1]")
     starter_root = args.starter_root.resolve()
     if str(starter_root) not in sys.path:
         sys.path.insert(0, str(starter_root))
@@ -460,6 +490,12 @@ def run(
             "experimental_low_ego_suppressed_ttc": (
                 args.experimental_low_ego_suppressed_ttc
             ),
+            "experimental_turn_lateral_accel_mps2": (
+                args.experimental_turn_lateral_accel_mps2
+            ),
+            "experimental_turn_minimum_yolo_iou": (
+                args.experimental_turn_minimum_yolo_iou
+            ),
         },
         "hardware_independent_workload": {
             "detector": detector_workload,
@@ -496,6 +532,12 @@ def run(
                 ),
                 "experimental_low_ego_suppressed_ttc": (
                     args.experimental_low_ego_suppressed_ttc
+                ),
+                "experimental_turn_lateral_accel_mps2": (
+                    args.experimental_turn_lateral_accel_mps2
+                ),
+                "experimental_turn_minimum_yolo_iou": (
+                    args.experimental_turn_minimum_yolo_iou
                 ),
             },
             "confidence_temporal": {
@@ -745,6 +787,8 @@ def run(
                         else "detector"
                     )
                     risk_frame = None
+                    turn_association_iou = 0.0
+                    turn_association_gate_active = False
                     if (
                         args.integrated_union_events
                         and classical_tracker is not None
@@ -831,6 +875,35 @@ def run(
                                 if classical_floor_applied
                                 else "classical"
                             )
+                        selected_classical_track = _find_track(
+                            classical_risk_tracks, classical_track_id
+                        )
+                        turn_association_iou = _best_road_user_detection_iou(
+                            selected_classical_track, detections
+                        )
+                        turn_association_gate_active = bool(
+                            args.experimental_turn_lateral_accel_mps2 > 0.0
+                            and args.experimental_turn_minimum_yolo_iou > 0.0
+                            and abs(float(frame.lateral_accel))
+                            >= args.experimental_turn_lateral_accel_mps2
+                            and union_source.startswith("classical")
+                            and union_ttc < 2.0
+                        )
+                        if (
+                            turn_association_gate_active
+                            and turn_association_iou
+                            < args.experimental_turn_minimum_yolo_iou
+                        ):
+                            # On a turn, a static straight-ahead stereo corridor
+                            # can select a side object. Keep detector TTC as the
+                            # fallback only if the classical track has no current
+                            # semantic association.
+                            union_ttc = float(capped_ttc)
+                            union_track_id = capped_track_id
+                            union_confidence = float(capped_confidence)
+                            union_closing = float(capped_closing)
+                            union_tracks = risk_tracks
+                            union_source = "turn_unassociated_classical_fallback"
                         risk_frame = risk_machine.update(
                             int(frame.frame_id),
                             float(frame.timestamp),
@@ -881,6 +954,7 @@ def run(
                             "classical_components": len(classical_components),
                             "classical_risk_tracks": len(classical_risk_tracks),
                             "union_source": union_source,
+                            "turn_association_gate_active": turn_association_gate_active,
                         }
                     )
                     peak_rss_mb = max(
@@ -953,6 +1027,16 @@ def run(
                                     capped_closing
                                 ),
                                 "ego_speed_mps": float(frame.speed_kmh) / 3.6,
+                                "lateral_accel_mps2": float(frame.lateral_accel),
+                                "longitudinal_accel_mps2": float(
+                                    frame.longitudinal_accel
+                                ),
+                                "turn_association_gate_active": (
+                                    turn_association_gate_active
+                                ),
+                                "classical_selected_yolo_iou": (
+                                    turn_association_iou
+                                ),
                                 "uncapped_predicted_ttc": _ttc_text(
                                     float(plain_ttc)
                                 ),
@@ -1259,6 +1343,24 @@ def parse_args() -> argparse.Namespace:
         help=(
             "Finite non-danger TTC emitted when low-ego speed gate suppresses "
             "a raw classical danger candidate; omit to emit inf."
+        ),
+    )
+    parser.add_argument(
+        "--experimental-turn-lateral-accel-mps2",
+        type=float,
+        default=0.0,
+        help=(
+            "Enable turn-aware classical fallback only at or above this "
+            "absolute lateral acceleration. Zero disables it."
+        ),
+    )
+    parser.add_argument(
+        "--experimental-turn-minimum-yolo-iou",
+        type=float,
+        default=0.0,
+        help=(
+            "When the turn gate is active, replace an unassociated classical "
+            "danger TTC with detector TTC. Zero disables it."
         ),
     )
     parser.add_argument(
