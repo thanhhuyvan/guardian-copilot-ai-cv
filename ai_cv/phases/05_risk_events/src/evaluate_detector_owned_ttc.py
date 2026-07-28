@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Iterable
 
 import numpy as np
+import psutil
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
@@ -38,12 +39,20 @@ from classical_geometry import (  # noqa: E402
     collision_corridor_mask,
     estimate_ground_model,
     estimate_object_depth,
+    extract_obstacle_components,
+    ground_and_obstacle_masks,
 )
 from classical_tracking import ComponentTracker, select_minimum_ttc  # noqa: E402
 from cross_validate_guarded_ttc import score  # noqa: E402
 from cross_validate_yolo26_fusion import load_detections_csv  # noqa: E402
 from detector_interfaces import Detection  # noqa: E402
 from stereo_backends import create_backend  # noqa: E402
+from risk_events import (  # noqa: E402
+    RiskState,
+    RiskStateConfig,
+    RiskStateMachine,
+    build_risk_events,
+)
 
 
 ROAD_USER_CLASSES = frozenset(
@@ -197,6 +206,79 @@ def _selected_track_evidence(
     }
 
 
+def _find_track(tracks: list[object], track_id: int | None) -> object | None:
+    return next(
+        (
+            track
+            for track in tracks
+            if track_id is not None and int(track.track_id) == track_id
+        ),
+        None,
+    )
+
+
+def _risk_level(state: RiskState, raw_band: str) -> str:
+    if state == RiskState.UNKNOWN:
+        return "UNKNOWN"
+    if state == RiskState.HIGH_RISK:
+        return raw_band if raw_band in {"DANGER", "CRITICAL"} else "DANGER"
+    if state == RiskState.ATTENTIVE:
+        return "WARNING"
+    return "SAFE"
+
+
+def _perception_document(
+    *,
+    trip_id: str,
+    frame_id: int,
+    timestamp: float,
+    ttc_sec: float,
+    risk_frame: object,
+    selected_track: object | None,
+    selection_confidence: float,
+    closing_speed_mps: float,
+    latency_ms: float,
+) -> dict[str, object]:
+    objects = []
+    if selected_track is not None:
+        x0, y0, x1, y1 = selected_track.bbox
+        objects.append(
+            {
+                "track_id": int(selected_track.track_id),
+                "object_type": "unknown",
+                "bbox_xyxy": [float(x0), float(y0), float(x1), float(y1)],
+                "detection_confidence": 0.0,
+                "distance_m": float(selected_track.latest.depth_m),
+                "closing_speed_mps": (
+                    float(closing_speed_mps)
+                    if math.isfinite(closing_speed_mps)
+                    else None
+                ),
+                "ttc_sec": float(ttc_sec) if math.isfinite(ttc_sec) else None,
+                "in_collision_corridor": True,
+                "ttc_quality": float(np.clip(selection_confidence, 0.0, 1.0)),
+            }
+        )
+    return {
+        "schema_version": "perception.v1",
+        "run_id": "phase06-integrated",
+        "trip_id": trip_id,
+        "frame_id": frame_id,
+        "timestamp": timestamp,
+        "image_width": 640,
+        "image_height": 360,
+        "status": "valid",
+        "objects": objects,
+        "min_ttc_sec": float(ttc_sec) if math.isfinite(ttc_sec) else None,
+        "risk_level": _risk_level(risk_frame.state, risk_frame.raw_band),
+        "perception_quality": float(
+            np.clip(selection_confidence if objects else 0.5, 0.0, 1.0)
+        ),
+        "latency_ms": float(latency_ms),
+        "degraded_reasons": [],
+    }
+
+
 def _ttc_text(value: float) -> str:
     return "inf" if not math.isfinite(value) else f"{value:.6f}"
 
@@ -277,6 +359,7 @@ def run(args: argparse.Namespace) -> dict[str, object]:
             "max_frames_per_trip": args.max_frames_per_trip,
             "latency_target_ms": args.latency_target_ms,
             "disk_loading_excluded_from_gate": True,
+            "integrated_union_events": args.integrated_union_events,
         },
         "hardware_independent_workload": {
             "detector": detector_workload,
@@ -299,11 +382,22 @@ def run(args: argparse.Namespace) -> dict[str, object]:
             "detector_owned_ego_cap": {
                 "maximum_closing_speed_mps": "min(20, ego_speed_mps + 3)",
             },
+            "conservative_union": {
+                "rule": (
+                    "classical fallback; detector only when detector alone "
+                    "reports TTC < 2 s"
+                ),
+                "enabled": args.integrated_union_events,
+            },
         },
         "trips": {},
     }
     runtime_rows: list[dict[str, object]] = []
+    process = psutil.Process()
+    peak_rss_mb = process.memory_info().rss / (1024.0 * 1024.0)
     evidence_rows_by_trip: dict[str, list[dict[str, object]]] = {}
+    perception_documents_by_trip: dict[str, list[dict[str, object]]] = {}
+    selected_risk_frames_by_trip: dict[str, list[object]] = {}
     nondeterministic_predictions = 0
     prediction_comparisons = 0
     gpu_memory: dict[str, float] | None = None
@@ -355,6 +449,8 @@ def run(args: argparse.Namespace) -> dict[str, object]:
                 "detector_owned": [],
                 "detector_owned_ego_cap": [],
             }
+            if args.integrated_union_events:
+                policies["conservative_union"] = []
             truth: list[float] = []
             stats = {
                 "detections": 0,
@@ -376,6 +472,24 @@ def run(args: argparse.Namespace) -> dict[str, object]:
                     risk_bottom_width_fraction=0.50,
                     minimum_bottom_fraction=0.45,
                     minimum_height_fraction=0.025,
+                )
+                classical_tracker = (
+                    ComponentTracker(
+                        image_shape,
+                        depth_attribute="depth_p35_m",
+                        maximum_missed=3,
+                        risk_top_width_fraction=0.10,
+                        risk_bottom_width_fraction=0.50,
+                        minimum_bottom_fraction=0.50,
+                        minimum_height_fraction=0.05,
+                    )
+                    if args.integrated_union_events
+                    else None
+                )
+                risk_machine = (
+                    RiskStateMachine(RiskStateConfig())
+                    if args.integrated_union_events
+                    else None
                 )
                 for index, frame in enumerate(frames):
                     load_started = time.perf_counter()
@@ -428,6 +542,28 @@ def run(args: argparse.Namespace) -> dict[str, object]:
                         )
                         is not None
                     ]
+                    classical_components: list[ObstacleComponent] = []
+                    if (
+                        args.integrated_union_events
+                        and ground_model is not None
+                    ):
+                        _, obstacle_evidence, _ = ground_and_obstacle_masks(
+                            stereo.disparity_px, ground_model
+                        )
+                        support_mask = stereo.valid_mask
+                        if stereo.confidence is not None:
+                            support_mask = (
+                                stereo.valid_mask
+                                & np.isfinite(stereo.confidence)
+                                & (stereo.confidence >= 0.5)
+                            )
+                        classical_components, _, _ = extract_obstacle_components(
+                            stereo.disparity_px,
+                            obstacle_evidence,
+                            support_mask,
+                            focal_length_px,
+                            baseline_m,
+                        )
                     tracks = tracker.update(components, float(frame.timestamp))
                     risk_tracks = tracker.risk_tracks(tracks)
                     common = {
@@ -458,6 +594,64 @@ def run(args: argparse.Namespace) -> dict[str, object]:
                         maximum_closing_speed_mps=ego_cap,
                         **common,
                     )
+                    classical_risk_tracks: list[object] = []
+                    classical_ttc = math.inf
+                    classical_track_id = None
+                    classical_confidence = 0.0
+                    classical_closing = 0.0
+                    union_ttc = float(capped_ttc)
+                    union_track_id = capped_track_id
+                    union_confidence = float(capped_confidence)
+                    union_closing = float(capped_closing)
+                    union_tracks = risk_tracks
+                    union_source = "detector"
+                    risk_frame = None
+                    if (
+                        args.integrated_union_events
+                        and classical_tracker is not None
+                        and risk_machine is not None
+                    ):
+                        classical_tracks = classical_tracker.update(
+                            classical_components, float(frame.timestamp)
+                        )
+                        classical_risk_tracks = classical_tracker.risk_tracks(
+                            classical_tracks
+                        )
+                        (
+                            classical_ttc,
+                            classical_track_id,
+                            classical_confidence,
+                            classical_closing,
+                        ) = select_minimum_ttc(
+                            classical_risk_tracks,
+                            ground_confidence,
+                            minimum_track_confidence=0.75,
+                            maximum_closing_speed_mps=20.0,
+                            maximum_depth_m=20.0,
+                            maximum_motion_residual_m=0.8,
+                        )
+                        detector_only_danger = (
+                            capped_ttc < 2.0 and not classical_ttc < 2.0
+                        )
+                        if detector_only_danger:
+                            union_ttc = float(capped_ttc)
+                            union_track_id = capped_track_id
+                            union_confidence = float(capped_confidence)
+                            union_closing = float(capped_closing)
+                            union_tracks = risk_tracks
+                            union_source = "detector"
+                        else:
+                            union_ttc = float(classical_ttc)
+                            union_track_id = classical_track_id
+                            union_confidence = float(classical_confidence)
+                            union_closing = float(classical_closing)
+                            union_tracks = classical_risk_tracks
+                            union_source = "classical"
+                        risk_frame = risk_machine.update(
+                            int(frame.frame_id),
+                            float(frame.timestamp),
+                            union_ttc,
+                        )
                     postprocess_ms = (
                         time.perf_counter() - postprocess_started
                     ) * 1000.0
@@ -500,7 +694,14 @@ def run(args: argparse.Namespace) -> dict[str, object]:
                             "detections": len(detections),
                             "depth_valid_components": len(components),
                             "risk_tracks": len(risk_tracks),
+                            "classical_components": len(classical_components),
+                            "classical_risk_tracks": len(classical_risk_tracks),
+                            "union_source": union_source,
                         }
+                    )
+                    peak_rss_mb = max(
+                        peak_rss_mb,
+                        process.memory_info().rss / (1024.0 * 1024.0),
                     )
                     if repeat_index == 0:
                         stats["detections"] += len(detections)
@@ -513,6 +714,8 @@ def run(args: argparse.Namespace) -> dict[str, object]:
                         policies["detector_owned_ego_cap"].append(
                             float(capped_ttc)
                         )
+                        if args.integrated_union_events:
+                            policies["conservative_union"].append(union_ttc)
                         truth.append(float(frame.min_ttc))
                         selected_evidence = _selected_track_evidence(
                             risk_tracks, capped_track_id
@@ -550,8 +753,32 @@ def run(args: argparse.Namespace) -> dict[str, object]:
                                 **selected_evidence,
                             }
                         )
+                        if risk_frame is not None:
+                            selected_track = _find_track(
+                                union_tracks, union_track_id
+                            )
+                            perception_documents_by_trip.setdefault(
+                                trip_id, []
+                            ).append(
+                                _perception_document(
+                                    trip_id=trip_id,
+                                    frame_id=int(frame.frame_id),
+                                    timestamp=float(frame.timestamp),
+                                    ttc_sec=union_ttc,
+                                    risk_frame=risk_frame,
+                                    selected_track=selected_track,
+                                    selection_confidence=union_confidence,
+                                    closing_speed_mps=union_closing,
+                                    latency_ms=pipeline_compute_ms,
+                                )
+                            )
+                            selected_risk_frames_by_trip.setdefault(
+                                trip_id, []
+                            ).append(risk_frame)
                     else:
-                        prediction_comparisons += 2
+                        prediction_comparisons += (
+                            3 if args.integrated_union_events else 2
+                        )
                         nondeterministic_predictions += int(
                             not _prediction_equal(
                                 policies["detector_owned"][index],
@@ -564,6 +791,13 @@ def run(args: argparse.Namespace) -> dict[str, object]:
                                 float(capped_ttc),
                             )
                         )
+                        if args.integrated_union_events:
+                            nondeterministic_predictions += int(
+                                not _prediction_equal(
+                                    policies["conservative_union"][index],
+                                    union_ttc,
+                                )
+                            )
                     if args.progress_every and (
                         (index + 1) % args.progress_every == 0
                         or index + 1 == len(dataset)
@@ -635,6 +869,74 @@ def run(args: argparse.Namespace) -> dict[str, object]:
         _write_runtime_rows(
             args.output_dir / "evidence" / f"{trip_id}.csv", rows
         )
+    contract_validation = None
+    if args.integrated_union_events:
+        from jsonschema import Draft202012Validator
+
+        contracts_root = (
+            REPOSITORY_ROOT / "ai_cv" / "shared" / "contracts"
+        )
+        perception_validator = Draft202012Validator(
+            json.loads(
+                (contracts_root / "perception.v1.schema.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+        )
+        event_validator = Draft202012Validator(
+            json.loads(
+                (contracts_root / "risk_event.v1.schema.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+        )
+        perception_count = 0
+        event_count = 0
+        for trip_id, documents in perception_documents_by_trip.items():
+            for document in documents:
+                perception_validator.validate(document)
+            perception_count += len(documents)
+            output_path = (
+                args.output_dir
+                / "contracts"
+                / "perception"
+                / f"{trip_id}.jsonl"
+            )
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_text(
+                "".join(
+                    json.dumps(document, sort_keys=True) + "\n"
+                    for document in documents
+                ),
+                encoding="utf-8",
+            )
+            risk_frames = selected_risk_frames_by_trip.get(trip_id, [])
+            events = build_risk_events(
+                risk_frames,
+                trip_id=trip_id,
+                run_id=f"phase06-{trip_id}",
+                merge_gap_frames=4,
+            )
+            for event in events:
+                event_validator.validate(event)
+            event_count += len(events)
+            event_path = (
+                args.output_dir
+                / "contracts"
+                / "events"
+                / f"{trip_id}.json"
+            )
+            event_path.parent.mkdir(parents=True, exist_ok=True)
+            event_path.write_text(
+                json.dumps(events, indent=2, sort_keys=True),
+                encoding="utf-8",
+            )
+        contract_validation = {
+            "perception_documents": perception_count,
+            "risk_events": event_count,
+            "perception_schema_valid": True,
+            "risk_event_schema_valid": True,
+        }
     live_latency = [
         float(row["pipeline_compute_ms"]) for row in runtime_rows
     ]
@@ -668,6 +970,8 @@ def run(args: argparse.Namespace) -> dict[str, object]:
         "passed": nondeterministic_predictions == 0,
     }
     report["gpu_memory"] = gpu_memory
+    report["cpu_memory"] = {"peak_rss_mb": float(peak_rss_mb)}
+    report["contract_validation"] = contract_validation
     report_path = args.output_dir / "detector_owned_report.json"
     report_path.write_text(
         json.dumps(report, indent=2, sort_keys=True), encoding="utf-8"
@@ -717,6 +1021,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--start-frame-index", type=int, default=0)
     parser.add_argument("--max-frames-per-trip", type=int)
     parser.add_argument("--latency-target-ms", type=float, default=75.0)
+    parser.add_argument(
+        "--integrated-union-events",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+    )
     parser.add_argument("--opencv-threads", type=int, default=6)
     parser.add_argument("--stereo-workers", type=int, default=1)
     parser.add_argument("--progress-every", type=int, default=100)
