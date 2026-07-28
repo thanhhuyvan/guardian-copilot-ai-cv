@@ -57,6 +57,18 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--opencv-threads", type=int, default=2)
     parser.add_argument("--stereo-workers", type=int, default=2)
     parser.add_argument("--progress-every", type=int, default=300)
+    parser.add_argument(
+        "--confidence-temporal",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Enable the experimental confidence-gated temporal TTC lane.",
+    )
+    parser.add_argument(
+        "--depth-confidence-gate",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+    )
+    parser.add_argument("--minimum-depth-confidence", type=float, default=0.25)
     args = parser.parse_args(argv)
 
     args.integrated_union_events = True

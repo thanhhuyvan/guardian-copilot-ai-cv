@@ -56,6 +56,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--opencv-threads", type=int, default=2)
     parser.add_argument("--stereo-workers", type=int, default=2)
     parser.add_argument("--progress-every", type=int, default=100)
+    parser.add_argument(
+        "--depth-confidence-gate",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+    )
+    parser.add_argument("--minimum-depth-confidence", type=float, default=0.25)
     return parser.parse_args(argv)
 
 
@@ -69,6 +75,8 @@ def _base_args(args: argparse.Namespace, output_dir: Path) -> argparse.Namespace
     deployment.opencv_threads = args.opencv_threads
     deployment.stereo_workers = args.stereo_workers
     deployment.progress_every = args.progress_every
+    deployment.depth_confidence_gate = args.depth_confidence_gate
+    deployment.minimum_depth_confidence = args.minimum_depth_confidence
     return deployment
 
 

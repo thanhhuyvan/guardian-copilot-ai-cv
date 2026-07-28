@@ -552,6 +552,7 @@ def select_minimum_ttc(
     semantic_max_misses: int = 3,
     semantic_fallback_depth_m: float = 5.0,
     use_filtered_motion: bool = False,
+    minimum_depth_confidence: float = 0.0,
 ) -> tuple[float, int | None, float, float]:
     best = (math.inf, None, 0.0, 0.0)
     for track in tracks:
@@ -565,6 +566,8 @@ def select_minimum_ttc(
             use_filtered_motion=use_filtered_motion,
         )
         if confidence < minimum_track_confidence:
+            continue
+        if track.latest.depth_confidence < minimum_depth_confidence:
             continue
         if closing_speed > maximum_closing_speed_mps:
             continue

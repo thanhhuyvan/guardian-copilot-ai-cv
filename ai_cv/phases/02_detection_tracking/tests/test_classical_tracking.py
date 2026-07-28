@@ -27,6 +27,7 @@ def component(
     *,
     y: int = 100,
     height: int = 60,
+    depth_confidence: float = 0.9,
 ) -> ObstacleComponent:
     return ObstacleComponent(
         component_id=1,
@@ -47,7 +48,7 @@ def component(
         quality=0.9,
         object_depth_m=depth,
         object_depth_mad_m=0.1,
-        object_depth_confidence=0.9,
+        object_depth_confidence=depth_confidence,
         object_depth_mode_count=1,
     )
 
@@ -169,6 +170,31 @@ class TrackingTests(unittest.TestCase):
             ground_confidence=1.0,
             minimum_track_confidence=0.0,
             maximum_depth_m=20.0,
+        )
+
+        self.assertTrue(math.isinf(result[0]))
+
+    def test_ttc_selection_rejects_low_depth_confidence(self) -> None:
+        tracker = TRACKING.ComponentTracker(
+            (200, 300), depth_attribute="object_depth_m"
+        )
+        for frame_index in range(4):
+            tracks = tracker.update(
+                [
+                    component(
+                        130,
+                        12.0 - frame_index * 0.2,
+                        depth_confidence=0.20,
+                    )
+                ],
+                frame_index * 0.1,
+            )
+
+        result = TRACKING.select_minimum_ttc(
+            tracker.risk_tracks(tracks),
+            ground_confidence=1.0,
+            minimum_track_confidence=0.0,
+            minimum_depth_confidence=0.45,
         )
 
         self.assertTrue(math.isinf(result[0]))

@@ -14,6 +14,7 @@
 /ai_cv/outputs/phase05_live*/
 /ai_cv/outputs/phase05_router*/
 /ai_cv/outputs/phase06_*/
+/ai_cv/outputs/phase08_*/
 !/ai_cv/outputs/**/.gitkeep
 !/ai_cv/outputs/README.md
 

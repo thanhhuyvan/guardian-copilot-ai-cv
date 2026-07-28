@@ -83,6 +83,7 @@ def detection_component(
     corridor_mask: np.ndarray,
     *,
     component_id: int,
+    stereo_confidence: np.ndarray | None = None,
 ) -> ObstacleComponent | None:
     """Convert one road-user detection into a metric stereo component."""
     if detection.class_name.lower() not in ROAD_USER_CLASSES:
@@ -97,10 +98,16 @@ def detection_component(
         & np.isfinite(roi_disparity)
         & (roi_disparity > 0.5)
     )
+    roi_lr_consistent = roi_valid
+    if stereo_confidence is not None:
+        roi_confidence = stereo_confidence[y0:y1, x0:x1]
+        roi_lr_consistent = (
+            roi_valid & np.isfinite(roi_confidence) & (roi_confidence >= 0.5)
+        )
     estimate = estimate_object_depth(
         roi_disparity,
         roi_valid,
-        roi_valid,
+        roi_lr_consistent,
         focal_length_px,
         baseline_m,
         inner_width_fraction=0.70,
@@ -112,6 +119,12 @@ def detection_component(
     valid_count = int(np.count_nonzero(roi_valid))
     box_area = (x1 - x0) * (y1 - y0)
     lr_support = float(valid_count / max(1, box_area))
+    stereo_lr_support = float(
+        np.count_nonzero(roi_lr_consistent) / max(1, valid_count)
+    )
+    depth_confidence = float(
+        estimate.confidence * (0.35 + 0.65 * stereo_lr_support)
+    )
     corridor_overlap = float(
         np.mean(corridor_mask[y0:y1, x0:x1])
     )
@@ -121,7 +134,7 @@ def detection_component(
         np.clip(
             0.35 * detection.confidence
             + 0.25 * min(1.0, lr_support / 0.35)
-            + 0.40 * estimate.confidence,
+            + 0.40 * depth_confidence,
             0.0,
             1.0,
         )
@@ -145,7 +158,7 @@ def detection_component(
         quality=quality,
         object_depth_m=estimate.depth_m,
         object_depth_mad_m=estimate.depth_mad_m,
-        object_depth_confidence=estimate.confidence,
+        object_depth_confidence=depth_confidence,
         object_depth_mode_count=estimate.mode_count,
     )
 
@@ -313,6 +326,8 @@ def run(
     The hooks exist for Phase 06 robustness evaluation.  They never write to
     the input dataset and leave the normal deployment invocation unchanged.
     """
+    if not 0.0 <= args.minimum_depth_confidence <= 1.0:
+        raise ValueError("minimum depth confidence must be in [0, 1]")
     starter_root = args.starter_root.resolve()
     if str(starter_root) not in sys.path:
         sys.path.insert(0, str(starter_root))
@@ -402,6 +417,12 @@ def run(
                 ),
                 "enabled": args.integrated_union_events,
             },
+            "confidence_temporal": {
+                "enabled": args.confidence_temporal,
+                "depth_confidence_gate": args.depth_confidence_gate,
+                "minimum_depth_confidence": args.minimum_depth_confidence,
+                "predicted_tracks": False,
+            },
         },
         "trips": {},
     }
@@ -487,6 +508,8 @@ def run(
                     risk_bottom_width_fraction=0.50,
                     minimum_bottom_fraction=0.45,
                     minimum_height_fraction=0.025,
+                    use_uncertainty_filter=args.confidence_temporal,
+                    include_predicted_tracks=False,
                 )
                 classical_tracker = (
                     ComponentTracker(
@@ -557,6 +580,7 @@ def run(
                                 baseline_m,
                                 corridor,
                                 component_id=component_id,
+                                stereo_confidence=stereo.confidence,
                             )
                         )
                         is not None
@@ -590,6 +614,17 @@ def run(
                         "maximum_depth_m": 20.0,
                         "maximum_motion_residual_m": 0.8,
                     }
+                    if args.depth_confidence_gate or args.confidence_temporal:
+                        common["minimum_depth_confidence"] = (
+                            args.minimum_depth_confidence
+                        )
+                    if args.confidence_temporal:
+                        common.update(
+                            {
+                                "maximum_motion_residual_m": 1.2,
+                                "use_filtered_motion": True,
+                            }
+                        )
                     plain_ttc, plain_track_id, plain_confidence, plain_closing = (
                         select_minimum_ttc(
                             risk_tracks,
@@ -623,7 +658,11 @@ def run(
                     union_confidence = float(capped_confidence)
                     union_closing = float(capped_closing)
                     union_tracks = risk_tracks
-                    union_source = "detector"
+                    union_source = (
+                        "confidence_temporal_detector"
+                        if args.confidence_temporal
+                        else "detector"
+                    )
                     risk_frame = None
                     if (
                         args.integrated_union_events
@@ -658,7 +697,11 @@ def run(
                             union_confidence = float(capped_confidence)
                             union_closing = float(capped_closing)
                             union_tracks = risk_tracks
-                            union_source = "detector"
+                            union_source = (
+                                "confidence_temporal_detector"
+                                if args.confidence_temporal
+                                else "detector"
+                            )
                         else:
                             union_ttc = float(classical_ttc)
                             union_track_id = classical_track_id
@@ -1044,6 +1087,27 @@ def parse_args() -> argparse.Namespace:
         "--integrated-union-events",
         action=argparse.BooleanOptionalAction,
         default=False,
+    )
+    parser.add_argument(
+        "--confidence-temporal",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help=(
+            "Use depth-confidence-gated filtered motion for detector TTC; "
+            "missed tracks are never predicted forward."
+        ),
+    )
+    parser.add_argument(
+        "--depth-confidence-gate",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Reject detector TTC candidates with weak current stereo support.",
+    )
+    parser.add_argument(
+        "--minimum-depth-confidence",
+        type=float,
+        default=0.25,
+        help="Minimum current object-depth confidence for temporal TTC.",
     )
     parser.add_argument("--opencv-threads", type=int, default=6)
     parser.add_argument("--stereo-workers", type=int, default=1)

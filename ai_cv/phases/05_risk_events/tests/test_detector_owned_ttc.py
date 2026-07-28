@@ -59,3 +59,24 @@ def test_detection_component_rejects_non_road_user_and_sparse_depth() -> None:
     assert detection_component(
         car, disparity, valid, 100.0, 0.5, corridor, component_id=2
     ) is None
+
+
+def test_detection_component_penalizes_lr_inconsistent_depth() -> None:
+    disparity = np.full((100, 160), 20.0, dtype=np.float32)
+    valid = np.ones_like(disparity, dtype=bool)
+    confidence = np.zeros_like(disparity, dtype=np.float32)
+    detection = Detection((45, 30, 115, 90), 2, "car", 0.9)
+
+    component = detection_component(
+        detection,
+        disparity,
+        valid,
+        100.0,
+        0.5,
+        collision_corridor_mask((100, 160)),
+        component_id=1,
+        stereo_confidence=confidence,
+    )
+
+    assert component is not None
+    assert component.object_depth_confidence < 0.45

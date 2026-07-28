@@ -23,6 +23,9 @@ def test_deployment_defaults_freeze_validated_protocol() -> None:
     assert args.latency_target_ms == 75.0
     assert args.opencv_threads == 2
     assert args.stereo_workers == 2
+    assert args.confidence_temporal is False
+    assert args.depth_confidence_gate is False
+    assert args.minimum_depth_confidence == 0.25
 
 
 def test_deployment_entry_point_rejects_cached_detections() -> None:
