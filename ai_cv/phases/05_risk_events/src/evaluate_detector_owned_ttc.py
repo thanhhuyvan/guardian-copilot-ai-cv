@@ -362,6 +362,11 @@ def run(
         raise ValueError(
             "experimental classical minimum closing speed must be finite and >= 0.3"
         )
+    if (
+        not math.isfinite(args.experimental_low_ego_speed_max_mps)
+        or args.experimental_low_ego_speed_max_mps < 0.0
+    ):
+        raise ValueError("experimental low ego speed must be finite and >= 0")
     starter_root = args.starter_root.resolve()
     if str(starter_root) not in sys.path:
         sys.path.insert(0, str(starter_root))
@@ -425,6 +430,9 @@ def run(
             "experimental_classical_minimum_closing_speed_mps": (
                 args.experimental_classical_minimum_closing_speed_mps
             ),
+            "experimental_low_ego_speed_max_mps": (
+                args.experimental_low_ego_speed_max_mps
+            ),
         },
         "hardware_independent_workload": {
             "detector": detector_workload,
@@ -455,6 +463,9 @@ def run(
                 "enabled": args.integrated_union_events,
                 "experimental_classical_minimum_closing_speed_mps": (
                     args.experimental_classical_minimum_closing_speed_mps
+                ),
+                "experimental_low_ego_speed_max_mps": (
+                    args.experimental_low_ego_speed_max_mps
                 ),
             },
             "confidence_temporal": {
@@ -715,6 +726,17 @@ def run(
                         classical_risk_tracks = classical_tracker.risk_tracks(
                             classical_tracks
                         )
+                        ego_speed_mps = float(frame.speed_kmh) / 3.6
+                        use_low_ego_gate = (
+                            args.experimental_low_ego_speed_max_mps > 0.0
+                            and ego_speed_mps
+                            <= args.experimental_low_ego_speed_max_mps
+                        )
+                        classical_minimum_closing_speed_mps = (
+                            args.experimental_classical_minimum_closing_speed_mps
+                            if use_low_ego_gate
+                            else 0.3
+                        )
                         (
                             classical_ttc,
                             classical_track_id,
@@ -725,7 +747,7 @@ def run(
                             ground_confidence,
                             minimum_track_confidence=0.75,
                             minimum_closing_speed_mps=(
-                                args.experimental_classical_minimum_closing_speed_mps
+                                classical_minimum_closing_speed_mps
                             ),
                             maximum_closing_speed_mps=20.0,
                             maximum_depth_m=20.0,
@@ -847,8 +869,9 @@ def run(
                                         classical_closing
                                     ),
                                     "experimental_classical_minimum_closing_speed_mps": (
-                                        args.experimental_classical_minimum_closing_speed_mps
+                                        classical_minimum_closing_speed_mps
                                     ),
+                                    "experimental_low_ego_gate_active": use_low_ego_gate,
                                 "union_predicted_ttc": _ttc_text(
                                     float(union_ttc)
                                 ),
@@ -1162,6 +1185,15 @@ def parse_args() -> argparse.Namespace:
             "Experimental lower bound for the classical fallback's estimated "
             "closing speed. Default 0.3 preserves the frozen candidate; any "
             "other value requires held-out validation."
+        ),
+    )
+    parser.add_argument(
+        "--experimental-low-ego-speed-max-mps",
+        type=float,
+        default=0.0,
+        help=(
+            "Apply experimental classical speed gate only when ego speed is "
+            "at or below this m/s value. Zero disables condition."
         ),
     )
     parser.add_argument(
