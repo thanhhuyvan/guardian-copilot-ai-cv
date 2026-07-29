@@ -81,7 +81,7 @@ class Phase02BSetupAssetTests(unittest.TestCase):
         self.assertIn("nvidia-ml-py==12.570.172", openstereo)
         self.assertIn("onnxruntime-gpu==1.22.0", openstereo)
         self.assertIn("tensorrt-cu12==10.8.0.43", openstereo)
-        self.assertIn("timm==1.0.15", openstereo)
+        self.assertIn("timm==0.4.12", openstereo)
 
         for requirements in (guardian, openstereo):
             for line in requirements.splitlines():
