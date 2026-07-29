@@ -141,6 +141,15 @@ class MaskTests(unittest.TestCase):
         self.assertTrue(np.all(obstacle[45:75, 50:70]))
         self.assertFalse(np.any(ground[45:75, 50:70]))
 
+    def test_vectorized_ground_line_matches_reference(self) -> None:
+        rows = np.arange(180, dtype=np.float32)
+        disparities = 0.10 * rows + 2.0
+        weights = np.linspace(1.0, 5.0, rows.size, dtype=np.float32)
+        self.assertEqual(
+            GEOMETRY.fit_ground_line(rows, disparities, weights),
+            GEOMETRY.fit_ground_line_vectorized(rows, disparities, weights),
+        )
+
     def test_corridor_is_narrower_at_top(self) -> None:
         mask = GEOMETRY.collision_corridor_mask((100, 200))
         self.assertLess(np.count_nonzero(mask[40]), np.count_nonzero(mask[99]))
