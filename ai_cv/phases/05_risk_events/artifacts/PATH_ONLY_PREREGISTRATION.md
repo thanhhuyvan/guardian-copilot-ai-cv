@@ -30,3 +30,24 @@ Pass criteria, fixed before scoring:
 Only after the review confirms the geometric state is credible may a
 path-risk gate and one official F1/MAE run be proposed. A score change without
 this review is not evidence that the path model is correct.
+
+## Fixed diagnostic event policy
+
+The first scored diagnostic is intentionally narrow. It starts from the
+frozen conservative-union TTC in Phase 17 and considers only a classical
+danger candidate (`TTC < 2 s`) that has a current YOLO track with IoU at least
+0.30. It projects that YOLO box-depth measurement directly into the
+ego-compensated path frame. If the absolute offset exceeds the physical 1.75 m
+half-lane corridor, the diagnostic emits `2.0 s` for the *event* policy while
+retaining the original finite TTC in a parallel raw column. No missing or
+unassociated measurement is suppressed.
+
+`2.0 s`, rather than infinity, is the pre-registered event-to-TTC encoding:
+the challenge interface has one TTC field and derives danger from `< 2 s`.
+It avoids the evaluator's `99 s` substitution, but does not make its
+framewise TTC MAE equivalent to an event-system metric.
+
+This diagnostic is a candidate only when the frozen raw score reproduces the
+Phase 17 V1 score, T01 improves, neither T02 nor T05 F1 declines, and critical
+TTC MAE does not regress. The current review is AI-provisional, so even a
+passing score cannot be promoted before independent visual review.
