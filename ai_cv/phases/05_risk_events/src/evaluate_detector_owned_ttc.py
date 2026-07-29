@@ -593,6 +593,7 @@ def run(
                 args.experimental_path_corridor_half_width_m
             ),
             "v2_shadow_state": args.v2_shadow_state,
+            "experimental_v2_ekf_ttc_gate": args.experimental_v2_ekf_ttc_gate,
         },
         "hardware_independent_workload": {
             "detector": detector_workload,
@@ -909,7 +910,8 @@ def run(
                         classical_risk_tracks = classical_tracker.risk_tracks(
                             classical_tracks
                         )
-                        if args.v2_shadow_state:
+                        v2_updates_by_track: dict[int, object] = {}
+                        if args.v2_shadow_state or args.experimental_v2_ekf_ttc_gate:
                             noise = PlanarNoise(1.56, 0.51, 3.0, 2.0)
                             yaw_rate = yaw_rate_rps(
                                 float(frame.speed_kmh) / 3.6,
@@ -933,6 +935,7 @@ def run(
                                     longitudinal_m=measurement[0],
                                     lateral_m=measurement[1],
                                 )
+                                v2_updates_by_track[int(track.track_id)] = update
                                 v2_shadow_updates.append(
                                     {"track_id": int(track.track_id), "accepted": update.accepted,
                                      "mahalanobis_squared": round(update.mahalanobis_squared, 4),
@@ -1016,6 +1019,33 @@ def run(
                         selected_classical_track = _find_track(
                             classical_risk_tracks, classical_track_id
                         )
+                        if (
+                            args.experimental_v2_ekf_ttc_gate
+                            and union_source.startswith("classical")
+                            and union_ttc < 2.0
+                        ):
+                            update = v2_updates_by_track.get(
+                                int(classical_track_id)
+                                if classical_track_id is not None
+                                else -1
+                            )
+                            ekf_ttc = math.inf
+                            if update is not None and update.accepted:
+                                if update.longitudinal_velocity_mps < -0.3:
+                                    ekf_ttc = (
+                                        update.longitudinal_m
+                                        / -update.longitudinal_velocity_mps
+                                    )
+                            if ekf_ttc < 2.0:
+                                union_ttc = float(ekf_ttc)
+                                union_source = "v2_ekf_classical"
+                            else:
+                                union_ttc = float(capped_ttc)
+                                union_track_id = capped_track_id
+                                union_confidence = float(capped_confidence)
+                                union_closing = float(capped_closing)
+                                union_tracks = risk_tracks
+                                union_source = "v2_ekf_classical_fallback"
                         path_gate_active = bool(
                             args.experimental_path_intersection
                             and union_source.startswith("classical")
@@ -1562,6 +1592,12 @@ def parse_args() -> argparse.Namespace:
         action=argparse.BooleanOptionalAction,
         default=False,
         help="Log V2 EKF innovations without changing TTC or risk output.",
+    )
+    parser.add_argument(
+        "--experimental-v2-ekf-ttc-gate",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Use accepted V2 EKF longitudinal TTC for classical danger tracks.",
     )
     parser.add_argument(
         "--parallel-inference",
