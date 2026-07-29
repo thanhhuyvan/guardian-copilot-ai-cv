@@ -1,9 +1,22 @@
 # V2 framewise occupancy ablation — rejected
 
-> **Invalidated July 30; corrected rerun required.** Framewise mode required a
-> non-existent FSM before association and initialized V2 TTC before final
-> conservative-union selection. The numbers below are historical provenance,
-> not evidence against framewise occupancy or multi-cue association.
+## Corrected, valid result — July 30
+
+After fixing conversion, unchanged pre-registered policy ran once across six
+untouched trips. It starts with finalized conservative-union TTC, uses
+classical-source danger, IoU `>=0.30`, accepted EKF update, occupancy `<0.50`,
+and finite `2.0 s` suppression. No FSM; no parameter changes.
+
+| Candidate | Danger-F1 | Critical TTC MAE | Composite |
+|---|---:|---:|---:|
+| Frozen V1 conservative union | **0.654** | **29.993 s** | **42.8** |
+| Corrected V2 framewise occupancy | 0.547 | 30.119 s | 39.1 |
+
+Reject fixed hard-IoU plus occupancy policy: it fails frozen F1 and MAE gates.
+This does not test multi-cue association, which still needs label validation.
+
+> Historical comparison below remains provenance only. It came from the
+> invalid pre-fix run and must not be used for decisions.
 
 ## Historical comparison
 
@@ -29,17 +42,14 @@ removed the event FSM.
 
 ## Corrected decision
 
-Invalidate this policy result. Source now begins with finalized
-conservative-union TTC and does not require an FSM in framewise mode. Rerun
-once with unchanged IoU `0.30`, occupancy `0.50`, and suppression TTC `2.0 s`.
-No parameters may be tuned.
+Corrected run rejects this policy. No occupancy, IoU, EKF-noise, or timing
+value may be tuned from the six trips.
 
 ## What the experiment established
 
-1. The original V2 event-to-TTC conversion was invalid for a framewise TTC
-   metric because the deployment FSM suppressed genuine short intervals.
-2. That conversion bug is not the complete explanation. The fixed framewise
-   ablation still suppresses real T02 danger and causes a major MAE regression.
+1. Historical pre-fix results were invalid because conversion did not begin
+   from finalized union TTC and framewise mode did not attempt association.
+2. Corrected hard-IoU occupancy suppression reduces overall F1 to `0.547`.
 3. Coverage audit explains why V2 cannot be a broad V1 repair yet: it covers
    only 34/112 V1 false-positive frames (30%) and 66/163 V1 true-positive
    frames (40%). In T05, 28/47 V1 false positives have no classical-to-YOLO
