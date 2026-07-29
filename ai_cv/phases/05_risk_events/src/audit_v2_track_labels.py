@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import math
 from collections import Counter
 from pathlib import Path
 
@@ -32,10 +33,25 @@ def main() -> None:
         if row["path_relation"] and row["path_relation"] not in VALID_PATH_RELATIONS
     ]
     by_relation: dict[str, list[float]] = {}
+    unavailable_occupancy = 0
     for row in complete:
-        by_relation.setdefault(row["path_relation"], []).append(
-            float(row["occupancy_probability"])
-        )
+        try:
+            occupancy = float(row["occupancy_probability"])
+        except ValueError:
+            occupancy = math.nan
+        if math.isfinite(occupancy):
+            by_relation.setdefault(row["path_relation"], []).append(occupancy)
+        else:
+            unavailable_occupancy += 1
+    means = {
+        relation: sum(values) / len(values) for relation, values in by_relation.items()
+    }
+    non_path_values = by_relation.get("adjacent", []) + by_relation.get("diverging", [])
+    direction_consistent = (
+        "on_path" in means
+        and bool(non_path_values)
+        and means["on_path"] > sum(non_path_values) / len(non_path_values)
+    )
     report = {
         "total_rows": len(rows),
         "complete_rows": len(complete),
@@ -43,9 +59,10 @@ def main() -> None:
         "invalid_path_relation_rows": len(invalid),
         "trip_counts": dict(Counter(row["trip_id"] for row in complete)),
         "path_relation_counts": dict(Counter(row["path_relation"] for row in complete)),
-        "mean_occupancy_by_path_relation": {
-            relation: sum(values) / len(values) for relation, values in by_relation.items()
-        },
+        "occupancy_available_rows": len(complete) - unavailable_occupancy,
+        "occupancy_unavailable_rows": unavailable_occupancy,
+        "mean_occupancy_by_path_relation": means,
+        "occupancy_direction_consistent": direction_consistent,
         "decision": (
             "ready_for_track_level_review" if len(complete) >= 30 and not invalid
             else "labels_incomplete_no_risk_gate_decision"
