@@ -27,7 +27,9 @@ def main() -> None:
     for label in labels:
         row = evidence[(label["trip_id"], label["frame_id"])]
         track_id = int(label["track_id"])
-        tracks = json.loads(row["classical_track_measurements_json"])
+        tracks = json.loads(row.get("detector_track_measurements_json", "[]"))
+        if not tracks:
+            tracks = json.loads(row["classical_track_measurements_json"])
         track = next(track for track in tracks if int(track["track_id"]) == track_id)
         image = cv2.imread(label["left_image_path"])
         if image is None:
