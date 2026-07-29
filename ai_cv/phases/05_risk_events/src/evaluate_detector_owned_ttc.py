@@ -496,6 +496,11 @@ def run(
     """
     if not 0.0 <= args.minimum_depth_confidence <= 1.0:
         raise ValueError("minimum depth confidence must be in [0, 1]")
+    v2_event_policy_enabled = bool(
+        args.experimental_v2_event_to_ttc or args.experimental_v2_event_framewise
+    )
+    if v2_event_policy_enabled and not args.integrated_union_events:
+        raise ValueError("V2 event experiments require --integrated-union-events")
     if (
         not math.isfinite(args.experimental_classical_minimum_closing_speed_mps)
         or args.experimental_classical_minimum_closing_speed_mps < 0.3
@@ -609,6 +614,8 @@ def run(
             ),
             "v2_shadow_state": args.v2_shadow_state,
             "experimental_v2_ekf_ttc_gate": args.experimental_v2_ekf_ttc_gate,
+            "experimental_v2_event_to_ttc": args.experimental_v2_event_to_ttc,
+            "experimental_v2_event_framewise": args.experimental_v2_event_framewise,
         },
         "hardware_independent_workload": {
             "detector": detector_workload,
@@ -728,7 +735,7 @@ def run(
             }
             if args.integrated_union_events:
                 policies["conservative_union"] = []
-            if args.experimental_v2_event_to_ttc:
+            if v2_event_policy_enabled:
                 policies["v2_event_to_ttc"] = []
             truth: list[float] = []
             stats = {
@@ -867,7 +874,7 @@ def run(
                     v2_shadow_updates: list[dict[str, object]] = []
                     v2_detector_updates: dict[int, object] = {}
                     v2_detector_occupancy: dict[int, float | None] = {}
-                    if args.v2_shadow_state or args.experimental_v2_event_to_ttc:
+                    if args.v2_shadow_state or v2_event_policy_enabled:
                         noise = PlanarNoise(1.56, 0.51, 3.0, 2.0)
                         yaw_rate = yaw_rate_rps(
                             float(frame.speed_kmh) / 3.6,
@@ -1212,7 +1219,7 @@ def run(
                             union_tracks = risk_tracks
                             union_source = "turn_unassociated_classical_fallback"
                         if (
-                            args.experimental_v2_event_to_ttc
+                            v2_event_policy_enabled
                             and v2_event_machine is not None
                             and union_source.startswith("classical")
                             and union_ttc < 2.0
@@ -1307,7 +1314,7 @@ def run(
                         )
                         if args.integrated_union_events:
                             policies["conservative_union"].append(union_ttc)
-                        if args.experimental_v2_event_to_ttc:
+                        if v2_event_policy_enabled:
                             policies["v2_event_to_ttc"].append(v2_submission_ttc)
                         truth.append(float(frame.min_ttc))
                         selected_evidence = _selected_track_evidence(
@@ -1751,6 +1758,15 @@ def parse_args() -> argparse.Namespace:
         action=argparse.BooleanOptionalAction,
         default=False,
         help="Apply the pre-registered V2 occupancy event-to-TTC experiment.",
+    )
+    parser.add_argument(
+        "--experimental-v2-event-framewise",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help=(
+            "Apply the separately pre-registered V2 occupancy suppression "
+            "framewise, without the deployment FSM. Diagnostic only."
+        ),
     )
     parser.add_argument(
         "--parallel-inference",
