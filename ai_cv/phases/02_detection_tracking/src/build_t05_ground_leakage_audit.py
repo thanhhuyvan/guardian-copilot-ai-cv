@@ -43,6 +43,11 @@ FIELDS = [
     "union_source", "classical_selected_bbox_xyxy", "ground_confidence",
     "classical_selected_depth_m", "raw_detections_json", "component_label", "notes",
 ]
+METRIC_FIELDS = [
+    "frame_id", "sample_stratum", "ground_confidence", "ground_residual_px",
+    "selected_ground_fraction", "selected_obstacle_fraction", "selected_component_iou",
+    "selected_component_area", "selected_component_quality",
+]
 
 
 def _finite(value: str) -> float:
@@ -58,18 +63,33 @@ def _truth(trip_dir: Path) -> dict[int, float]:
         return {int(frame["frame_id"]): float(frame["min_ttc"]) for frame in json.load(handle)["frames"]}
 
 
-def _draw_bbox(image: np.ndarray, values: str, color: tuple[int, int, int], label: str) -> None:
+def _bbox(values: str) -> tuple[int, int, int, int] | None:
     try:
-        x0, y0, x1, y1 = (round(float(value)) for value in json.loads(values))
+        return tuple(round(float(value)) for value in json.loads(values))
     except (ValueError, TypeError, json.JSONDecodeError):
+        return None
+
+
+def _iou(first: tuple[int, int, int, int], second: tuple[int, int, int, int]) -> float:
+    left, top = max(first[0], second[0]), max(first[1], second[1])
+    right, bottom = min(first[2], second[2]), min(first[3], second[3])
+    overlap = max(0, right - left) * max(0, bottom - top)
+    union = (first[2] - first[0]) * (first[3] - first[1]) + (second[2] - second[0]) * (second[3] - second[1]) - overlap
+    return overlap / union if union > 0 else 0.0
+
+
+def _draw_bbox(image: np.ndarray, values: str, color: tuple[int, int, int], label: str) -> None:
+    bbox = _bbox(values)
+    if bbox is None:
         return
+    x0, y0, x1, y1 = bbox
     cv2.rectangle(image, (x0, y0), (x1, y1), color, 2)
     cv2.putText(image, label, (x0, max(16, y0 - 5)), cv2.FONT_HERSHEY_SIMPLEX, 0.48, color, 2, cv2.LINE_AA)
 
 
 def _render_case(
     row: dict[str, str], trip_dir: Path, output_path: Path, left_matcher, right_matcher
-) -> None:
+) -> dict[str, object]:
     frame_id = int(row["frame_id"])
     left, right = read_stereo(trip_dir, frame_id)
     focal_length_px, baseline_m = load_calibration(trip_dir)
@@ -77,6 +97,13 @@ def _render_case(
     _, consistent, _ = left_right_consistency(disparity, right_disparity)
     ground_model, _ = estimate_ground_model(disparity)
     image = left.copy()
+    metrics: dict[str, object] = {
+        "frame_id": frame_id, "sample_stratum": row["sample_stratum"],
+        "ground_confidence": math.nan, "ground_residual_px": math.nan,
+        "selected_ground_fraction": math.nan, "selected_obstacle_fraction": math.nan,
+        "selected_component_iou": math.nan, "selected_component_area": math.nan,
+        "selected_component_quality": math.nan,
+    }
     if ground_model is None:
         cv2.putText(image, "NO GROUND MODEL", (8, 26), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
     else:
@@ -88,6 +115,20 @@ def _render_case(
         components, _, corridor = extract_obstacle_components(
             disparity, obstacle, consistent, focal_length_px, baseline_m
         )
+        metrics["ground_confidence"] = ground_model.confidence
+        metrics["ground_residual_px"] = ground_model.median_residual_px
+        selected_bbox = _bbox(row["classical_selected_bbox_xyxy"])
+        if selected_bbox is not None:
+            x0, y0, x1, y1 = selected_bbox
+            selected_ground = ground[y0:y1, x0:x1]
+            selected_obstacle = obstacle[y0:y1, x0:x1]
+            metrics["selected_ground_fraction"] = float(np.mean(selected_ground))
+            metrics["selected_obstacle_fraction"] = float(np.mean(selected_obstacle))
+            matched = max(components, key=lambda item: _iou(selected_bbox, item.bbox), default=None)
+            if matched is not None:
+                metrics["selected_component_iou"] = _iou(selected_bbox, matched.bbox)
+                metrics["selected_component_area"] = matched.area
+                metrics["selected_component_quality"] = matched.quality
         image[corridor & ~ground & ~obstacle] = (
             0.85 * image[corridor & ~ground & ~obstacle] + np.array([25, 25, 25])
         ).astype(np.uint8)
@@ -111,6 +152,7 @@ def _render_case(
     output_path.parent.mkdir(parents=True, exist_ok=True)
     if not cv2.imwrite(str(output_path), image):
         raise RuntimeError(f"could not write {output_path}")
+    return metrics
 
 
 def main() -> None:
@@ -154,17 +196,30 @@ def main() -> None:
         writer.writerows(selected)
     left_matcher, right_matcher = create_left_matcher(), create_right_matcher()
     trip_dir = args.practice_root / trip_id
+    metric_rows = []
     for row in selected:
-        _render_case(
+        metric_rows.append(_render_case(
             row, trip_dir,
             args.output_dir / "overlays" / row["sample_stratum"] / f"{int(row['frame_id']):06d}.jpg",
             left_matcher, right_matcher,
-        )
+        ))
+    with (args.output_dir / "t05_ground_component_metrics.csv").open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=METRIC_FIELDS)
+        writer.writeheader()
+        writer.writerows(metric_rows)
+    summary_by_stratum = {}
+    for stratum in {str(row["sample_stratum"]) for row in metric_rows}:
+        group = [row for row in metric_rows if row["sample_stratum"] == stratum]
+        summary_by_stratum[stratum] = {
+            field: float(np.nanmedian([float(row[field]) for row in group]))
+            for field in METRIC_FIELDS[2:]
+        }
     summary = {
         "contract": "offline diagnosis only; no prediction code or parameters changed",
         "false_alert_frames": len(false_rows),
         "true_danger_anchor_frames": len(anchor_rows),
         "label_values": ["road_leak", "real_object", "mixed", "unknown"],
+        "median_metrics_by_stratum": summary_by_stratum,
     }
     (args.output_dir / "audit_manifest.json").write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(summary, indent=2))
