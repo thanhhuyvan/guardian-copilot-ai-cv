@@ -23,6 +23,8 @@
 /ai_cv/outputs/phase10_*.log
 /ai_cv/outputs/phase11_*/
 /ai_cv/outputs/phase11_*.log
+/ai_cv/outputs/phase12_*/
+/ai_cv/outputs/phase12_*.log
 !/ai_cv/outputs/**/.gitkeep
 !/ai_cv/outputs/README.md
 
