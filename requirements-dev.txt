@@ -1,2 +1,6 @@
 -r ai_cv/phases/01_data_baseline/requirements.txt
+numpy==2.2.6
+opencv-python-headless==4.11.0.86
+psutil==7.0.0
+pytest==8.3.5
 jsonschema==4.26.0
