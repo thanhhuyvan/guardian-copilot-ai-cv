@@ -83,6 +83,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     args.experimental_turn_minimum_yolo_iou = 0.0
     args.experimental_path_intersection = False
     args.experimental_path_corridor_half_width_m = 1.75
+    args.v2_shadow_state = False
+    args.experimental_v2_ekf_ttc_gate = False
     args.detections_dir = (
         REPOSITORY_ROOT
         / "ai_cv"

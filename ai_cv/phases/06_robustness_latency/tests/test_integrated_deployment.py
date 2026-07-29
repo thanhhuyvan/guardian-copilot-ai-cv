@@ -26,6 +26,8 @@ def test_deployment_defaults_freeze_validated_protocol() -> None:
     assert args.confidence_temporal is False
     assert args.depth_confidence_gate is False
     assert args.minimum_depth_confidence == 0.25
+    assert args.v2_shadow_state is False
+    assert args.experimental_v2_ekf_ttc_gate is False
 
 
 def test_deployment_entry_point_rejects_cached_detections() -> None:
