@@ -53,3 +53,10 @@ def test_planar_filter_rejects_large_statistical_innovation() -> None:
     outlier = filter_.update(timestamp=0.2, longitudinal_m=2.0, lateral_m=8.0)
     assert not outlier.accepted
     assert math.isfinite(outlier.mahalanobis_squared)
+
+
+def test_filter_exposes_future_lateral_distribution() -> None:
+    filter_ = PlanarRelativeKalmanFilter(PlanarNoise(0.2, 0.2, 1.0, 1.0))
+    filter_.update(timestamp=0.0, longitudinal_m=10.0, lateral_m=0.0)
+    distribution = filter_.lateral_distribution_at(1.0)
+    assert distribution is not None and distribution[1] > 0.0

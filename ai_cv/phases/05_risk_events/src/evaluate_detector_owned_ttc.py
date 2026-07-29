@@ -61,6 +61,7 @@ from path_relative_state import (  # noqa: E402
     PlanarNoise,
     PlanarRelativeKalmanFilter,
     camera_measurement_to_planar,
+    corridor_occupancy_probability,
     yaw_rate_rps,
 )
 
@@ -934,12 +935,28 @@ def run(
                                     timestamp=float(frame.timestamp),
                                     longitudinal_m=measurement[0],
                                     lateral_m=measurement[1],
+                                    ego_speed_mps=float(frame.speed_kmh) / 3.6,
+                                    yaw_rate=yaw_rate,
                                 )
                                 v2_updates_by_track[int(track.track_id)] = update
+                                horizon = (
+                                    update.longitudinal_m / -update.longitudinal_velocity_mps
+                                    if update.longitudinal_velocity_mps < -0.3
+                                    else math.inf
+                                )
+                                distribution = filter_.lateral_distribution_at(
+                                    min(2.0, horizon) if math.isfinite(horizon) else 2.0
+                                )
+                                occupancy = (
+                                    corridor_occupancy_probability(
+                                        lateral_mean_m=distribution[0], lateral_variance_m2=distribution[1], corridor_half_width_m=1.75
+                                    ) if distribution is not None else None
+                                )
                                 v2_shadow_updates.append(
                                     {"track_id": int(track.track_id), "accepted": update.accepted,
                                      "mahalanobis_squared": round(update.mahalanobis_squared, 4),
-                                     "yaw_rate_rps": yaw_rate}
+                                     "yaw_rate_rps": yaw_rate, "cpa_horizon_s": horizon,
+                                     "corridor_occupancy_probability": occupancy}
                                 )
                         ego_speed_mps = float(frame.speed_kmh) / 3.6
                         use_low_ego_gate = (

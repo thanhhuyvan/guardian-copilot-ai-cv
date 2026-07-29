@@ -127,7 +127,9 @@ class PlanarRelativeKalmanFilter:
         self.covariance: np.ndarray | None = None
         self.timestamp: float | None = None
 
-    def _predict(self, timestamp: float) -> None:
+    def _predict(
+        self, timestamp: float, *, ego_speed_mps: float = 0.0, yaw_rate: float | None = None
+    ) -> None:
         if self.state is None or self.covariance is None or self.timestamp is None:
             return
         dt = float(timestamp - self.timestamp)
@@ -152,6 +154,18 @@ class PlanarRelativeKalmanFilter:
         )
         self.state = transition @ self.state
         self.covariance = transition @ self.covariance @ transition.T + process_noise
+        # The state is target motion in the prior ego frame.  Express it in
+        # the current ego frame after host translation and yaw rotation.
+        position = compensate_ego_motion(
+            longitudinal_m=float(self.state[0]), lateral_m=float(self.state[1]),
+            speed_mps=ego_speed_mps, yaw_rate=yaw_rate, dt_s=dt,
+        )
+        angle = 0.0 if yaw_rate is None else -yaw_rate * dt
+        rotation = np.asarray([[math.cos(angle), -math.sin(angle)], [math.sin(angle), math.cos(angle)]])
+        self.state[:2] = position
+        self.state[2:] = rotation @ self.state[2:]
+        transform = np.zeros((4, 4)); transform[np.ix_([0, 1], [0, 1])] = rotation; transform[np.ix_([2, 3], [2, 3])] = rotation
+        self.covariance = transform @ self.covariance @ transform.T
         self.covariance = 0.5 * (self.covariance + self.covariance.T)
 
     def update(
@@ -160,6 +174,8 @@ class PlanarRelativeKalmanFilter:
         timestamp: float,
         longitudinal_m: float,
         lateral_m: float,
+        ego_speed_mps: float = 0.0,
+        yaw_rate: float | None = None,
     ) -> PlanarUpdate:
         measurement = np.asarray([longitudinal_m, lateral_m], dtype=np.float64)
         if not np.all(np.isfinite(measurement)) or not math.isfinite(timestamp):
@@ -171,7 +187,7 @@ class PlanarRelativeKalmanFilter:
             )
             self.timestamp = timestamp
             return PlanarUpdate(True, 0.0, *self.state)
-        self._predict(timestamp)
+        self._predict(timestamp, ego_speed_mps=ego_speed_mps, yaw_rate=yaw_rate)
         assert self.state is not None and self.covariance is not None
         observation = np.asarray([[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0]])
         measurement_noise = np.diag(
@@ -188,3 +204,10 @@ class PlanarRelativeKalmanFilter:
             self.covariance = 0.5 * (self.covariance + self.covariance.T)
         self.timestamp = timestamp
         return PlanarUpdate(accepted, mahalanobis_squared, *self.state)
+
+    def lateral_distribution_at(self, horizon_s: float) -> tuple[float, float] | None:
+        """Return future lateral mean/variance without mutating filter state."""
+        if self.state is None or self.covariance is None or horizon_s < 0.0:
+            return None
+        row = np.asarray([0.0, 1.0, 0.0, horizon_s])
+        return float(row @ self.state), float(row @ self.covariance @ row)
