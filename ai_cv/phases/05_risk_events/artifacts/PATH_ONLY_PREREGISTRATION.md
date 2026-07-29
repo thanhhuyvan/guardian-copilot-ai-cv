@@ -51,3 +51,17 @@ This diagnostic is a candidate only when the frozen raw score reproduces the
 Phase 17 V1 score, T01 improves, neither T02 nor T05 F1 declines, and critical
 TTC MAE does not regress. The current review is AI-provisional, so even a
 passing score cannot be promoted before independent visual review.
+
+## Contained-continuous coverage extension
+
+The next diagnostic changes only the association availability condition for
+the fixed direct path gate. For a classical danger frame, the candidate must
+be the **only** current YOLO box centre contained by the selected classical
+component and must have the same YOLO track identity in the immediately prior
+classical-danger frame. The first frame of every episode, ambiguity, lost
+continuity, missing geometry, and detector-sourced danger all fail open to the
+frozen V1 TTC.
+
+The corridor, `2.0 s` event encoding, raw-TTC preservation, and pass criteria
+are unchanged. This is an association-coverage diagnostic, not a new
+association policy or a deployment change.
