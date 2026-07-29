@@ -18,6 +18,10 @@ FIELDS = [
     "trip_id", "frame_id", "sample_stratum", "classical_bbox_xyxy", "proposed_track_id",
     "proposed_bbox_xyxy", "same_object", "notes",
 ]
+BLIND_FIELDS = [
+    "trip_id", "frame_id", "classical_bbox_xyxy", "proposed_track_id",
+    "proposed_bbox_xyxy", "same_object", "notes",
+]
 
 
 def _spaced(rows: list[dict[str, str]], count: int) -> list[dict[str, str]]:
@@ -39,6 +43,10 @@ def main() -> None:
     parser.add_argument("--practice-root", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--per-stratum", type=int, default=2)
+    parser.add_argument(
+        "--blind", action=argparse.BooleanOptionalAction, default=False,
+        help="Hide truth-derived strata from the label CSV and overlay paths.",
+    )
     args = parser.parse_args()
     selected: list[dict[str, str]] = []
     for evidence_path in sorted(args.evidence_root.glob("T*-Sample.csv")):
@@ -72,7 +80,8 @@ def main() -> None:
             selected.extend(_spaced(rows, args.per_stratum))
     args.output_dir.mkdir(parents=True, exist_ok=True)
     with (args.output_dir / "containment_validation_labels.csv").open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=FIELDS)
+        fields = BLIND_FIELDS if args.blind else FIELDS
+        writer = csv.DictWriter(handle, fieldnames=fields, extrasaction="ignore")
         writer.writeheader(); writer.writerows(selected)
     for row in selected:
         image_path = args.practice_root / row["trip_id"] / "kitti" / "image_2" / f"{int(row['frame_id']):06d}.jpg"
@@ -81,11 +90,12 @@ def main() -> None:
             raise FileNotFoundError(image_path)
         _draw(image, _bbox(row["classical_bbox_xyxy"]), (255, 0, 255), "classical")
         _draw(image, _bbox(row["proposed_bbox_xyxy"]), (0, 255, 255), "YOLO containment")
-        output = args.output_dir / "overlays" / row["trip_id"] / row["sample_stratum"] / f"{int(row['frame_id']):06d}.jpg"
+        category = "blind" if args.blind else row["sample_stratum"]
+        output = args.output_dir / "overlays" / row["trip_id"] / category / f"{int(row['frame_id']):06d}.jpg"
         output.parent.mkdir(parents=True, exist_ok=True)
         if not cv2.imwrite(str(output), image):
             raise RuntimeError(f"could not write {output}")
-    print(json.dumps({"label_rows": len(selected), "per_stratum": args.per_stratum}, indent=2))
+    print(json.dumps({"label_rows": len(selected), "per_stratum": args.per_stratum, "blind": args.blind}, indent=2))
 
 
 if __name__ == "__main__":
