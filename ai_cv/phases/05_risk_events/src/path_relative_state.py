@@ -88,12 +88,22 @@ def compensate_ego_motion(
 ) -> tuple[float, float]:
     """Map a prior relative position into the current ego frame.
 
-    The local frame is forward/lateral.  Translation is the bicycle-model
-    first-order step; rotation is omitted safely when yaw is unavailable.
+    The local frame is forward/lateral.  Translation follows the exact
+    constant-yaw bicycle arc; rotation is omitted safely when yaw is unknown.
     """
-    forward = longitudinal_m - max(0.0, speed_mps) * dt_s
-    lateral = lateral_m
-    angle = 0.0 if yaw_rate is None else -yaw_rate * dt_s
+    speed = max(0.0, speed_mps)
+    if yaw_rate is None or abs(yaw_rate) < 1e-4:
+        host_forward = speed * dt_s
+        host_lateral = 0.0
+        angle = 0.0
+    else:
+        turn = yaw_rate * dt_s
+        radius = speed / yaw_rate
+        host_forward = radius * math.sin(turn)
+        host_lateral = radius * (1.0 - math.cos(turn))
+        angle = -turn
+    forward = longitudinal_m - host_forward
+    lateral = lateral_m - host_lateral
     cosine, sine = math.cos(angle), math.sin(angle)
     return (
         float(cosine * forward - sine * lateral),

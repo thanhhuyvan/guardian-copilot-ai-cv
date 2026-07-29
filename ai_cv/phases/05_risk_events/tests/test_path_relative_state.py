@@ -48,6 +48,18 @@ def test_ego_motion_turns_prior_relative_position() -> None:
     assert yaw_rate_rps(0.5, 1.0) is None
 
 
+def test_ego_motion_matches_straight_limit_and_bicycle_arc() -> None:
+    straight = compensate_ego_motion(
+        longitudinal_m=20.0, lateral_m=2.0, speed_mps=10.0, yaw_rate=None, dt_s=0.1
+    )
+    assert straight == (19.0, 2.0)
+    turning = compensate_ego_motion(
+        longitudinal_m=20.0, lateral_m=0.0, speed_mps=10.0, yaw_rate=1.0, dt_s=0.1
+    )
+    assert turning[0] < 19.1
+    assert turning[1] < -1.8
+
+
 def test_planar_filter_rejects_large_statistical_innovation() -> None:
     filter_ = PlanarRelativeKalmanFilter(
         PlanarNoise(0.2, 0.2, 1.0, 1.0)
