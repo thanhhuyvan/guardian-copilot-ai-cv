@@ -362,6 +362,19 @@ def _find_track(tracks: list[object], track_id: int | None) -> object | None:
     )
 
 
+def _best_track_match(
+    source_track: object | None, candidate_tracks: list[object]
+) -> tuple[object | None, float]:
+    if source_track is None:
+        return None, 0.0
+    source_box = tuple(map(int, source_track.bbox))
+    best = max(
+        ((bbox_iou(source_box, tuple(map(int, track.bbox))), track) for track in candidate_tracks),
+        default=(0.0, None), key=lambda item: item[0],
+    )
+    return best[1], float(best[0])
+
+
 def _prefixed_evidence(
     prefix: str, values: dict[str, object]
 ) -> dict[str, object]:
@@ -715,6 +728,8 @@ def run(
             }
             if args.integrated_union_events:
                 policies["conservative_union"] = []
+            if args.experimental_v2_event_to_ttc:
+                policies["v2_event_to_ttc"] = []
             truth: list[float] = []
             stats = {
                 "detections": 0,
@@ -762,6 +777,11 @@ def run(
                 risk_machine = (
                     RiskStateMachine(RiskStateConfig())
                     if args.integrated_union_events
+                    else None
+                )
+                v2_event_machine = (
+                    RiskStateMachine(RiskStateConfig())
+                    if args.integrated_union_events and args.experimental_v2_event_to_ttc
                     else None
                 )
                 for index, frame in enumerate(frames):
@@ -845,7 +865,9 @@ def run(
                     tracks = tracker.update(components, float(frame.timestamp))
                     risk_tracks = tracker.risk_tracks(tracks)
                     v2_shadow_updates: list[dict[str, object]] = []
-                    if args.v2_shadow_state:
+                    v2_detector_updates: dict[int, object] = {}
+                    v2_detector_occupancy: dict[int, float | None] = {}
+                    if args.v2_shadow_state or args.experimental_v2_event_to_ttc:
                         noise = PlanarNoise(1.56, 0.51, 3.0, 2.0)
                         yaw_rate = yaw_rate_rps(
                             float(frame.speed_kmh) / 3.6,
@@ -874,6 +896,7 @@ def run(
                                 yaw_rate=yaw_rate,
                                 measurement_sigmas_m=measurement_sigmas,
                             )
+                            v2_detector_updates[int(track.track_id)] = update
                             horizon = (
                                 update.longitudinal_m / -update.longitudinal_velocity_mps
                                 if update.longitudinal_velocity_mps < -0.3
@@ -890,6 +913,7 @@ def run(
                                 )
                                 if distribution is not None else None
                             )
+                            v2_detector_occupancy[int(track.track_id)] = occupancy
                             v2_shadow_updates.append(
                                 {
                                     "track_id": int(track.track_id),
@@ -965,6 +989,10 @@ def run(
                     path_intersection_possible = True
                     path_lateral_separation_m: float | None = None
                     path_gate_active = False
+                    v2_submission_ttc = float(union_ttc)
+                    v2_matched_iou = 0.0
+                    v2_occupancy: float | None = None
+                    v2_low_occupancy_suppressed = False
                     if (
                         args.integrated_union_events
                         and classical_tracker is not None
@@ -1183,6 +1211,31 @@ def run(
                             union_closing = float(capped_closing)
                             union_tracks = risk_tracks
                             union_source = "turn_unassociated_classical_fallback"
+                        if (
+                            args.experimental_v2_event_to_ttc
+                            and v2_event_machine is not None
+                            and union_source.startswith("classical")
+                            and union_ttc < 2.0
+                        ):
+                            matched_track, v2_matched_iou = _best_track_match(
+                                selected_classical_track, tracks
+                            )
+                            if matched_track is not None and v2_matched_iou >= 0.30:
+                                matched_id = int(matched_track.track_id)
+                                update = v2_detector_updates.get(matched_id)
+                                v2_occupancy = v2_detector_occupancy.get(matched_id)
+                                if (
+                                    update is not None and update.accepted
+                                    and v2_occupancy is not None and v2_occupancy < 0.50
+                                ):
+                                    v2_submission_ttc = 2.0
+                                    v2_low_occupancy_suppressed = True
+                        if v2_event_machine is not None:
+                            v2_frame = v2_event_machine.update(
+                                int(frame.frame_id), float(frame.timestamp), v2_submission_ttc
+                            )
+                            if v2_frame.state != RiskState.HIGH_RISK:
+                                v2_submission_ttc = max(float(union_ttc), 2.0)
                         risk_frame = risk_machine.update(
                             int(frame.frame_id),
                             float(frame.timestamp),
@@ -1254,6 +1307,8 @@ def run(
                         )
                         if args.integrated_union_events:
                             policies["conservative_union"].append(union_ttc)
+                        if args.experimental_v2_event_to_ttc:
+                            policies["v2_event_to_ttc"].append(v2_submission_ttc)
                         truth.append(float(frame.min_ttc))
                         selected_evidence = _selected_track_evidence(
                             risk_tracks, capped_track_id
@@ -1326,6 +1381,10 @@ def run(
                                 "v2_shadow_updates_json": json.dumps(
                                     v2_shadow_updates, separators=(",", ":")
                                 ),
+                                "v2_event_to_ttc": _ttc_text(v2_submission_ttc),
+                                "v2_event_match_iou": v2_matched_iou,
+                                "v2_event_occupancy": "" if v2_occupancy is None else v2_occupancy,
+                                "v2_event_low_occupancy_suppressed": v2_low_occupancy_suppressed,
                                 "path_intersection_possible": (
                                     path_intersection_possible
                                 ),
@@ -1686,6 +1745,12 @@ def parse_args() -> argparse.Namespace:
         action=argparse.BooleanOptionalAction,
         default=False,
         help="Use accepted V2 EKF longitudinal TTC for classical danger tracks.",
+    )
+    parser.add_argument(
+        "--experimental-v2-event-to-ttc",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Apply the pre-registered V2 occupancy event-to-TTC experiment.",
     )
     parser.add_argument(
         "--parallel-inference",
