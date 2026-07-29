@@ -52,7 +52,28 @@ def main() -> None:
                 updates = json.loads(row.get("v2_shadow_updates_json", "[]"))
                 if not updates:
                     continue
-                update = max(updates, key=lambda item: item.get("mahalanobis_squared", 0.0))
+                selected_track_id = row.get("selected_track_id", "")
+                update = next(
+                    (
+                        item for item in updates
+                        if str(item.get("track_id", "")) == selected_track_id
+                        and item.get("measurement_source") == "yolo_box_median_disparity"
+                    ),
+                    None,
+                )
+                if update is None:
+                    # Known-failure frames may lack a detector TTC candidate;
+                    # retain an object-level track rather than classical noise.
+                    detector_updates = [
+                        item for item in updates
+                        if item.get("measurement_source") == "yolo_box_median_disparity"
+                    ]
+                    if not detector_updates:
+                        continue
+                    update = max(
+                        detector_updates,
+                        key=lambda item: item.get("depth_confidence", 0.0),
+                    )
                 frame_id = int(row["frame_id"])
                 candidates.append(
                     {

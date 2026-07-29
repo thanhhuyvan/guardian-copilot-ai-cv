@@ -740,7 +740,11 @@ def run(
                     use_uncertainty_filter=args.confidence_temporal,
                     include_predicted_tracks=False,
                 )
-                v2_filters: dict[int, PlanarRelativeKalmanFilter] = {}
+                # Detector tracks own a YOLO box plus robust box-depth.  V2
+                # must consume these object-level measurements, never an
+                # arbitrary classical connected component.
+                v2_detector_filters: dict[int, PlanarRelativeKalmanFilter] = {}
+                v2_classical_filters: dict[int, PlanarRelativeKalmanFilter] = {}
                 classical_tracker = (
                     ComponentTracker(
                         image_shape,
@@ -839,6 +843,62 @@ def run(
                         )
                     tracks = tracker.update(components, float(frame.timestamp))
                     risk_tracks = tracker.risk_tracks(tracks)
+                    v2_shadow_updates: list[dict[str, object]] = []
+                    if args.v2_shadow_state:
+                        noise = PlanarNoise(1.56, 0.51, 3.0, 2.0)
+                        yaw_rate = yaw_rate_rps(
+                            float(frame.speed_kmh) / 3.6,
+                            float(frame.lateral_accel),
+                        )
+                        for track in tracks:
+                            measurement = camera_measurement_to_planar(
+                                depth_m=float(track.latest.depth_m),
+                                center_x_px=float(track.latest.center_x),
+                                focal_length_px=focal_length_px,
+                                principal_x_px=principal_x_px,
+                            )
+                            if measurement is None:
+                                continue
+                            filter_ = v2_detector_filters.setdefault(
+                                int(track.track_id), PlanarRelativeKalmanFilter(noise)
+                            )
+                            update = filter_.update(
+                                timestamp=float(frame.timestamp),
+                                longitudinal_m=measurement[0],
+                                lateral_m=measurement[1],
+                                ego_speed_mps=float(frame.speed_kmh) / 3.6,
+                                yaw_rate=yaw_rate,
+                            )
+                            horizon = (
+                                update.longitudinal_m / -update.longitudinal_velocity_mps
+                                if update.longitudinal_velocity_mps < -0.3
+                                else math.inf
+                            )
+                            distribution = filter_.lateral_distribution_at(
+                                min(2.0, horizon) if math.isfinite(horizon) else 2.0
+                            )
+                            occupancy = (
+                                corridor_occupancy_probability(
+                                    lateral_mean_m=distribution[0],
+                                    lateral_variance_m2=distribution[1],
+                                    corridor_half_width_m=1.75,
+                                )
+                                if distribution is not None else None
+                            )
+                            v2_shadow_updates.append(
+                                {
+                                    "track_id": int(track.track_id),
+                                    "measurement_source": "yolo_box_median_disparity",
+                                    "bbox_xyxy": list(map(int, track.bbox)),
+                                    "depth_m": round(float(track.latest.depth_m), 4),
+                                    "depth_confidence": round(float(track.latest.depth_confidence), 4),
+                                    "accepted": update.accepted,
+                                    "mahalanobis_squared": round(update.mahalanobis_squared, 4),
+                                    "yaw_rate_rps": yaw_rate,
+                                    "cpa_horizon_s": horizon,
+                                    "corridor_occupancy_probability": occupancy,
+                                }
+                            )
                     common = {
                         "minimum_track_confidence": 0.65,
                         "maximum_depth_m": 20.0,
@@ -899,7 +959,6 @@ def run(
                     path_intersection_possible = True
                     path_lateral_separation_m: float | None = None
                     path_gate_active = False
-                    v2_shadow_updates: list[dict[str, object]] = []
                     if (
                         args.integrated_union_events
                         and classical_tracker is not None
@@ -912,7 +971,9 @@ def run(
                             classical_tracks
                         )
                         v2_updates_by_track: dict[int, object] = {}
-                        if args.v2_shadow_state or args.experimental_v2_ekf_ttc_gate:
+                        # Kept only to reproduce the already-rejected raw
+                        # classical EKF experiment.  It is not V2 shadow data.
+                        if args.experimental_v2_ekf_ttc_gate:
                             noise = PlanarNoise(1.56, 0.51, 3.0, 2.0)
                             yaw_rate = yaw_rate_rps(
                                 float(frame.speed_kmh) / 3.6,
@@ -927,7 +988,7 @@ def run(
                                 )
                                 if measurement is None:
                                     continue
-                                filter_ = v2_filters.setdefault(
+                                filter_ = v2_classical_filters.setdefault(
                                     int(track.track_id),
                                     PlanarRelativeKalmanFilter(noise),
                                 )
@@ -953,7 +1014,8 @@ def run(
                                     ) if distribution is not None else None
                                 )
                                 v2_shadow_updates.append(
-                                    {"track_id": int(track.track_id), "accepted": update.accepted,
+                                    {"track_id": int(track.track_id), "measurement_source": "classical_legacy",
+                                     "accepted": update.accepted,
                                      "mahalanobis_squared": round(update.mahalanobis_squared, 4),
                                      "yaw_rate_rps": yaw_rate, "cpa_horizon_s": horizon,
                                      "corridor_occupancy_probability": occupancy}
@@ -1251,6 +1313,9 @@ def run(
                                 ),
                                 "classical_track_measurements_json": (
                                     _track_measurements_json(classical_tracks)
+                                ),
+                                "detector_track_measurements_json": (
+                                    _track_measurements_json(tracks)
                                 ),
                                 "v2_shadow_updates_json": json.dumps(
                                     v2_shadow_updates, separators=(",", ":")
