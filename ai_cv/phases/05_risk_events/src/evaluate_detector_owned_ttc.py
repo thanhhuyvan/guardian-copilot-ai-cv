@@ -57,6 +57,12 @@ from risk_events import (  # noqa: E402
     RiskStateMachine,
     build_risk_events,
 )
+from path_relative_state import (  # noqa: E402
+    PlanarNoise,
+    PlanarRelativeKalmanFilter,
+    camera_measurement_to_planar,
+    yaw_rate_rps,
+)
 
 
 ROAD_USER_CLASSES = frozenset(
@@ -586,6 +592,7 @@ def run(
             "experimental_path_corridor_half_width_m": (
                 args.experimental_path_corridor_half_width_m
             ),
+            "v2_shadow_state": args.v2_shadow_state,
         },
         "hardware_independent_workload": {
             "detector": detector_workload,
@@ -731,6 +738,7 @@ def run(
                     use_uncertainty_filter=args.confidence_temporal,
                     include_predicted_tracks=False,
                 )
+                v2_filters: dict[int, PlanarRelativeKalmanFilter] = {}
                 classical_tracker = (
                     ComponentTracker(
                         image_shape,
@@ -889,6 +897,7 @@ def run(
                     path_intersection_possible = True
                     path_lateral_separation_m: float | None = None
                     path_gate_active = False
+                    v2_shadow_updates: list[dict[str, object]] = []
                     if (
                         args.integrated_union_events
                         and classical_tracker is not None
@@ -900,6 +909,35 @@ def run(
                         classical_risk_tracks = classical_tracker.risk_tracks(
                             classical_tracks
                         )
+                        if args.v2_shadow_state:
+                            noise = PlanarNoise(1.56, 0.51, 3.0, 2.0)
+                            yaw_rate = yaw_rate_rps(
+                                float(frame.speed_kmh) / 3.6,
+                                float(frame.lateral_accel),
+                            )
+                            for track in classical_tracks:
+                                measurement = camera_measurement_to_planar(
+                                    depth_m=float(track.latest.depth_m),
+                                    center_x_px=float(track.latest.center_x),
+                                    focal_length_px=focal_length_px,
+                                    principal_x_px=principal_x_px,
+                                )
+                                if measurement is None:
+                                    continue
+                                filter_ = v2_filters.setdefault(
+                                    int(track.track_id),
+                                    PlanarRelativeKalmanFilter(noise),
+                                )
+                                update = filter_.update(
+                                    timestamp=float(frame.timestamp),
+                                    longitudinal_m=measurement[0],
+                                    lateral_m=measurement[1],
+                                )
+                                v2_shadow_updates.append(
+                                    {"track_id": int(track.track_id), "accepted": update.accepted,
+                                     "mahalanobis_squared": round(update.mahalanobis_squared, 4),
+                                     "yaw_rate_rps": yaw_rate}
+                                )
                         ego_speed_mps = float(frame.speed_kmh) / 3.6
                         use_low_ego_gate = (
                             args.experimental_low_ego_speed_max_mps > 0.0
@@ -1166,6 +1204,9 @@ def run(
                                 ),
                                 "classical_track_measurements_json": (
                                     _track_measurements_json(classical_tracks)
+                                ),
+                                "v2_shadow_updates_json": json.dumps(
+                                    v2_shadow_updates, separators=(",", ":")
                                 ),
                                 "path_intersection_possible": (
                                     path_intersection_possible
@@ -1515,6 +1556,12 @@ def parse_args() -> argparse.Namespace:
         type=float,
         default=1.75,
         help="Half-width of the predicted ego path corridor in metres.",
+    )
+    parser.add_argument(
+        "--v2-shadow-state",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Log V2 EKF innovations without changing TTC or risk output.",
     )
     parser.add_argument(
         "--parallel-inference",
