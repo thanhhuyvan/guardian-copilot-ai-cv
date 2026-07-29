@@ -21,9 +21,18 @@ from evaluate_detector_owned_ttc import (
     _path_intersection_geometry,
     _prefixed_evidence,
     _track_measurements_json,
+    _v2_framewise_submission_ttc,
     detection_component,
     detection_evidence_json,
 )
+
+
+def test_v2_framewise_conversion_preserves_final_union_unless_fixed_gate_passes() -> None:
+    # This is the no-FSM diagnostic contract.  It must never start from an
+    # earlier detector candidate or convert an unavailable association.
+    assert _v2_framewise_submission_ttc(1.2, "classical", 0.0, False, None) == (1.2, False)
+    assert _v2_framewise_submission_ttc(1.2, "classical", 0.31, True, 0.49) == (2.0, True)
+    assert _v2_framewise_submission_ttc(1.2, "detector", 0.99, True, 0.01) == (1.2, False)
 
 
 def test_path_intersection_rejects_a_side_track_but_keeps_an_entering_track() -> None:

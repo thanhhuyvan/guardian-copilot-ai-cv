@@ -375,6 +375,31 @@ def _best_track_match(
     return best[1], float(best[0])
 
 
+def _v2_framewise_submission_ttc(
+    union_ttc: float,
+    union_source: str,
+    match_iou: float,
+    update_accepted: bool,
+    occupancy: float | None,
+) -> tuple[float, bool]:
+    """Apply fixed V2 occupancy suppression to final conservative-union TTC.
+
+    This deliberately has no FSM.  The FSM experiment consumes this same
+    candidate sequence later.  Keeping the conversion pure prevents the
+    framewise diagnostic from accidentally starting with detector TTC.
+    """
+    if (
+        union_source.startswith("classical")
+        and union_ttc < 2.0
+        and match_iou >= 0.30
+        and update_accepted
+        and occupancy is not None
+        and occupancy < 0.50
+    ):
+        return 2.0, True
+    return float(union_ttc), False
+
+
 def _prefixed_evidence(
     prefix: str, values: dict[str, object]
 ) -> dict[str, object]:
@@ -996,7 +1021,7 @@ def run(
                     path_intersection_possible = True
                     path_lateral_separation_m: float | None = None
                     path_gate_active = False
-                    v2_submission_ttc = float(union_ttc)
+                    v2_submission_ttc = math.inf
                     v2_matched_iou = 0.0
                     v2_occupancy: float | None = None
                     v2_low_occupancy_suppressed = False
@@ -1218,9 +1243,13 @@ def run(
                             union_closing = float(capped_closing)
                             union_tracks = risk_tracks
                             union_source = "turn_unassociated_classical_fallback"
+                        # V2 starts from the finalized conservative-union TTC,
+                        # after detector/classical selection and every enabled
+                        # safety fallback.  Both framewise and FSM modes use
+                        # this identical candidate sequence.
+                        v2_submission_ttc = float(union_ttc)
                         if (
                             v2_event_policy_enabled
-                            and v2_event_machine is not None
                             and union_source.startswith("classical")
                             and union_ttc < 2.0
                         ):
@@ -1231,12 +1260,15 @@ def run(
                                 matched_id = int(matched_track.track_id)
                                 update = v2_detector_updates.get(matched_id)
                                 v2_occupancy = v2_detector_occupancy.get(matched_id)
-                                if (
-                                    update is not None and update.accepted
-                                    and v2_occupancy is not None and v2_occupancy < 0.50
-                                ):
-                                    v2_submission_ttc = 2.0
-                                    v2_low_occupancy_suppressed = True
+                                v2_submission_ttc, v2_low_occupancy_suppressed = (
+                                    _v2_framewise_submission_ttc(
+                                        float(union_ttc),
+                                        union_source,
+                                        float(v2_matched_iou),
+                                        bool(update is not None and update.accepted),
+                                        v2_occupancy,
+                                    )
+                                )
                         if v2_event_machine is not None:
                             v2_frame = v2_event_machine.update(
                                 int(frame.frame_id), float(frame.timestamp), v2_submission_ttc

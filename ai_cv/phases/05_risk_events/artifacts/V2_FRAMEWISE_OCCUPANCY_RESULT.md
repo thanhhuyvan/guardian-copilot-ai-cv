@@ -1,6 +1,11 @@
 # V2 framewise occupancy ablation — rejected
 
-## Fixed, one-run comparison
+> **Invalidated July 30; corrected rerun required.** Framewise mode required a
+> non-existent FSM before association and initialized V2 TTC before final
+> conservative-union selection. The numbers below are historical provenance,
+> not evidence against framewise occupancy or multi-cue association.
+
+## Historical comparison
 
 The pre-registered framewise policy was run once on all six untouched practice
 trips and scored by the organizer evaluator. It used exactly the rejected
@@ -22,12 +27,12 @@ removed the event FSM.
 | T05 | 0.509 | 0.429 | worsens |
 | T06 | 0.821 | 0.821 | unchanged |
 
-## Decision
+## Corrected decision
 
-Reject this policy. Removing the FSM explains part of the earlier collapse
-(`0.428` to `0.623` F1), but it still fails both frozen V1 gates: F1 is lower
-and critical TTC MAE is higher. No occupancy, IoU, EKF-noise, or timing value
-may be tuned from this result.
+Invalidate this policy result. Source now begins with finalized
+conservative-union TTC and does not require an FSM in framewise mode. Rerun
+once with unchanged IoU `0.30`, occupancy `0.50`, and suppression TTC `2.0 s`.
+No parameters may be tuned.
 
 ## What the experiment established
 
