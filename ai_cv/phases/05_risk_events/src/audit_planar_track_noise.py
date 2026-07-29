@@ -30,16 +30,34 @@ def residual_sigmas(observations: list[dict[str, float]], focal_px: float, cx_px
     )
 
 
+def _range_summary(values: list[tuple[float, float, float]]) -> dict[str, object]:
+    result: dict[str, object] = {}
+    for name, lower, upper in (("near_0_10m", 0.0, 10.0), ("mid_10_20m", 10.0, 20.0), ("far_20m_plus", 20.0, float("inf"))):
+        selected = [item for item in values if lower <= item[0] < upper]
+        result[name] = {
+            "tracks": len(selected),
+            "depth_residual_sigma_m": _summary(np.asarray([item[1] for item in selected], dtype=float)),
+            "lateral_residual_sigma_m": _summary(np.asarray([item[2] for item in selected], dtype=float)),
+        }
+    return result
+
+
 def audit(evidence_path: Path, focal_px: float, cx_px: float) -> dict[str, object]:
     rows = list(csv.DictReader(evidence_path.open(encoding="utf-8", newline="")))
     histories: dict[str, dict[float, dict[str, float]]] = {}
+    used_detector_measurements = False
     for row in rows:
-        shadow_tracks = json.loads(
-            row.get(
-                "classical_track_measurements_json",
-                row.get("classical_risk_track_measurements_json", "[]"),
+        detector_tracks = row.get("detector_track_measurements_json", "[]")
+        shadow_tracks = json.loads(detector_tracks)
+        if shadow_tracks:
+            used_detector_measurements = True
+        else:
+            shadow_tracks = json.loads(
+                row.get(
+                    "classical_track_measurements_json",
+                    row.get("classical_risk_track_measurements_json", "[]"),
+                )
             )
-        )
         for item in shadow_tracks:
             histories.setdefault(str(item["track_id"]), {})[
                 float(item["timestamp"])
@@ -49,19 +67,21 @@ def audit(evidence_path: Path, focal_px: float, cx_px: float) -> dict[str, objec
             continue
         for item in json.loads(row["classical_selected_observations_json"]):
             histories.setdefault(track_id, {})[float(item["timestamp"])] = item
-    sigmas = [
-        value
-        for history in histories.values()
-        if (value := residual_sigmas(list(sorted(history.values(), key=lambda x: x["timestamp"])), focal_px, cx_px))
-        is not None
-    ]
-    depth = np.asarray([item[0] for item in sigmas], dtype=float)
-    lateral = np.asarray([item[1] for item in sigmas], dtype=float)
+    values = []
+    for history in histories.values():
+        observations = list(sorted(history.values(), key=lambda x: x["timestamp"]))
+        sigmas = residual_sigmas(observations, focal_px, cx_px)
+        if sigmas is not None:
+            values.append((float(np.median([item["depth_m"] for item in observations])), *sigmas))
+    depth = np.asarray([item[1] for item in values], dtype=float)
+    lateral = np.asarray([item[2] for item in values], dtype=float)
     summary = {
+        "measurement_source": "detector_yolo_box_depth" if used_detector_measurements else "classical_components",
         "tracks_with_history": len(histories),
-        "tracks_with_residual_estimate": len(sigmas),
+        "tracks_with_residual_estimate": len(values),
         "depth_residual_sigma_m": _summary(depth),
         "lateral_residual_sigma_m": _summary(lateral),
+        "residuals_by_range": _range_summary(values),
         "decision": "measurements_only_do_not_promote_filter_from_this_report",
     }
     return summary
