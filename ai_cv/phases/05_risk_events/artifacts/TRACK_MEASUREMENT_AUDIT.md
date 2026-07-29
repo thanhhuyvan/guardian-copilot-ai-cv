@@ -36,6 +36,11 @@ histories, with depth-residual sigma P50 `0.67 m` and P95 `4.68 m`. It is
 evidence for uncertainty-aware state estimation, but not enough to select an
 EKF measurement model or a risk threshold.
 
+The 30-clip review pack has mean selected-track visibility of 76.4% across an
+11-frame window (T05: 69.1%). Only one sampled track exists in a single frame.
+Track lifecycle is therefore a contributing data-quality issue, not a complete
+explanation for the false-alert rate.
+
 ## New validation test
 
 `outputs/phase21_track_measurement_audit/track_validation_labels.csv` contains
