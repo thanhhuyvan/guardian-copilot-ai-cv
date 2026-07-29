@@ -11,6 +11,7 @@ from path_relative_state import (
     PlanarNoise,
     PlanarRelativeKalmanFilter,
     camera_measurement_to_planar,
+    calibrated_box_measurement_sigmas,
     compensate_ego_motion,
     corridor_occupancy_probability,
     host_lateral_displacement_m,
@@ -32,6 +33,9 @@ def test_camera_measurement_projects_stereo_depth_to_lateral_position() -> None:
     assert camera_measurement_to_planar(
         depth_m=10.0, center_x_px=420.0, focal_length_px=500.0, principal_x_px=320.0
     ) == (10.0, 2.0)
+    assert calibrated_box_measurement_sigmas(5.0) == (2.0, 0.5)
+    assert calibrated_box_measurement_sigmas(15.0) == (2.0, 1.0)
+    assert calibrated_box_measurement_sigmas(25.0) == (4.0, 2.0)
 
 
 def test_ego_motion_turns_prior_relative_position() -> None:

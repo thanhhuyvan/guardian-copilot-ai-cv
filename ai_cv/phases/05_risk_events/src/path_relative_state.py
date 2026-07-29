@@ -63,6 +63,21 @@ def camera_measurement_to_planar(
     )
 
 
+def calibrated_box_measurement_sigmas(depth_m: float) -> tuple[float, float]:
+    """P90 residual-derived box-depth noise: near, mid, then far range.
+
+    Values are rounded conservatively from the six-trip detector-box residual
+    audit, not selected against danger-F1.
+    """
+    if not math.isfinite(depth_m) or depth_m <= 0.0:
+        raise ValueError("depth must be positive and finite")
+    if depth_m < 10.0:
+        return 2.0, 0.5
+    if depth_m < 20.0:
+        return 2.0, 1.0
+    return 4.0, 2.0
+
+
 def compensate_ego_motion(
     *,
     longitudinal_m: float,
@@ -176,14 +191,21 @@ class PlanarRelativeKalmanFilter:
         lateral_m: float,
         ego_speed_mps: float = 0.0,
         yaw_rate: float | None = None,
+        measurement_sigmas_m: tuple[float, float] | None = None,
     ) -> PlanarUpdate:
         measurement = np.asarray([longitudinal_m, lateral_m], dtype=np.float64)
         if not np.all(np.isfinite(measurement)) or not math.isfinite(timestamp):
             raise ValueError("timestamp and measurement must be finite")
+        measurement_sigmas = measurement_sigmas_m or (
+            self.noise.longitudinal_sigma_m,
+            self.noise.lateral_sigma_m,
+        )
+        if min(measurement_sigmas) <= 0.0:
+            raise ValueError("measurement sigmas must be positive")
         if self.timestamp is None or timestamp <= self.timestamp or timestamp - self.timestamp > 0.5:
             self.state = np.asarray([*measurement, 0.0, 0.0], dtype=np.float64)
             self.covariance = np.diag(
-                [self.noise.longitudinal_sigma_m**2, self.noise.lateral_sigma_m**2, 25.0, 25.0]
+                [measurement_sigmas[0] ** 2, measurement_sigmas[1] ** 2, 25.0, 25.0]
             )
             self.timestamp = timestamp
             return PlanarUpdate(True, 0.0, *self.state)
@@ -191,7 +213,7 @@ class PlanarRelativeKalmanFilter:
         assert self.state is not None and self.covariance is not None
         observation = np.asarray([[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0]])
         measurement_noise = np.diag(
-            [self.noise.longitudinal_sigma_m**2, self.noise.lateral_sigma_m**2]
+            [measurement_sigmas[0] ** 2, measurement_sigmas[1] ** 2]
         )
         innovation = measurement - observation @ self.state
         innovation_covariance = observation @ self.covariance @ observation.T + measurement_noise

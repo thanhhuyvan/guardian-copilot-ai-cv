@@ -60,6 +60,7 @@ from risk_events import (  # noqa: E402
 from path_relative_state import (  # noqa: E402
     PlanarNoise,
     PlanarRelativeKalmanFilter,
+    calibrated_box_measurement_sigmas,
     camera_measurement_to_planar,
     corridor_occupancy_probability,
     yaw_rate_rps,
@@ -859,6 +860,9 @@ def run(
                             )
                             if measurement is None:
                                 continue
+                            measurement_sigmas = calibrated_box_measurement_sigmas(
+                                float(track.latest.depth_m)
+                            )
                             filter_ = v2_detector_filters.setdefault(
                                 int(track.track_id), PlanarRelativeKalmanFilter(noise)
                             )
@@ -868,6 +872,7 @@ def run(
                                 lateral_m=measurement[1],
                                 ego_speed_mps=float(frame.speed_kmh) / 3.6,
                                 yaw_rate=yaw_rate,
+                                measurement_sigmas_m=measurement_sigmas,
                             )
                             horizon = (
                                 update.longitudinal_m / -update.longitudinal_velocity_mps
@@ -892,6 +897,7 @@ def run(
                                     "bbox_xyxy": list(map(int, track.bbox)),
                                     "depth_m": round(float(track.latest.depth_m), 4),
                                     "depth_confidence": round(float(track.latest.depth_confidence), 4),
+                                    "measurement_sigmas_m": list(measurement_sigmas),
                                     "accepted": update.accepted,
                                     "mahalanobis_squared": round(update.mahalanobis_squared, 4),
                                     "yaw_rate_rps": yaw_rate,
