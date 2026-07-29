@@ -25,6 +25,7 @@ def main() -> None:
     parser.add_argument("--practice-root", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--radius", type=int, default=5)
+    parser.add_argument("--contact-sheet-dir", type=Path)
     args = parser.parse_args()
 
     evidence: dict[tuple[str, int], dict[str, str]] = {}
@@ -42,7 +43,7 @@ def main() -> None:
         trip_id, frame_id, track_id = label["trip_id"], int(label["frame_id"]), int(label["track_id"])
         output = args.output_dir / trip_id / f"{frame_id:06d}_track_{track_id}.mp4"
         output.parent.mkdir(parents=True, exist_ok=True)
-        writer = None
+        writer, samples = None, []
         for current in range(max(0, frame_id - args.radius), frame_id + args.radius + 1):
             row = evidence.get((trip_id, current))
             if row is None:
@@ -68,8 +69,18 @@ def main() -> None:
                 caption = f"frame {current}: track {track_id} not observed"
             cv2.putText(image, caption, (8, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 2, cv2.LINE_AA)
             writer.write(image)
+            if current in {max(0, frame_id - args.radius), frame_id, frame_id + args.radius}:
+                samples.append(image)
         if writer is not None:
             writer.release(); written += 1
+        if args.contact_sheet_dir and samples:
+            while len(samples) < 3:
+                samples.append(samples[-1])
+            sheet = cv2.hconcat(samples[:3])
+            sheet_path = args.contact_sheet_dir / trip_id / f"{frame_id:06d}_track_{track_id}.jpg"
+            sheet_path.parent.mkdir(parents=True, exist_ok=True)
+            if not cv2.imwrite(str(sheet_path), sheet):
+                raise RuntimeError(f"could not write {sheet_path}")
     print(json.dumps({"clips": written, "radius_frames": args.radius, "blind_to_ground_truth": True}))
 
 
