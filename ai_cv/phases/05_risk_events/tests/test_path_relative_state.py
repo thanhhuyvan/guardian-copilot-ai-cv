@@ -12,8 +12,20 @@ from path_relative_state import (
     PlanarRelativeKalmanFilter,
     camera_measurement_to_planar,
     compensate_ego_motion,
+    corridor_occupancy_probability,
+    host_lateral_displacement_m,
     yaw_rate_rps,
 )
+
+
+def test_corridor_probability_uses_filter_uncertainty_not_a_score() -> None:
+    assert corridor_occupancy_probability(
+        lateral_mean_m=0.0, lateral_variance_m2=0.04, corridor_half_width_m=1.75
+    ) > 0.99
+    assert corridor_occupancy_probability(
+        lateral_mean_m=4.0, lateral_variance_m2=0.04, corridor_half_width_m=1.75
+    ) < 0.001
+    assert host_lateral_displacement_m(10.0, 0.1, 1.0) > 0.0
 
 
 def test_camera_measurement_projects_stereo_depth_to_lateral_position() -> None:

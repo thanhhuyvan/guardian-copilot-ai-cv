@@ -86,6 +86,28 @@ def compensate_ego_motion(
     )
 
 
+def host_lateral_displacement_m(
+    speed_mps: float, yaw_rate: float | None, horizon_s: float
+) -> float:
+    """Bicycle-model host lateral displacement over a future horizon."""
+    if yaw_rate is None or abs(yaw_rate) < 1e-4:
+        return 0.0
+    return float(speed_mps / yaw_rate * (1.0 - math.cos(yaw_rate * horizon_s)))
+
+
+def corridor_occupancy_probability(
+    *, lateral_mean_m: float, lateral_variance_m2: float, corridor_half_width_m: float
+) -> float:
+    """Gaussian probability that a predicted target lies in the ego corridor."""
+    if corridor_half_width_m <= 0.0 or lateral_variance_m2 < 0.0:
+        raise ValueError("invalid corridor or lateral variance")
+    sigma = math.sqrt(max(lateral_variance_m2, 1e-9))
+    normal_cdf = lambda value: 0.5 * (1.0 + math.erf(value / math.sqrt(2.0)))
+    upper = (corridor_half_width_m - lateral_mean_m) / sigma
+    lower = (-corridor_half_width_m - lateral_mean_m) / sigma
+    return float(np.clip(normal_cdf(upper) - normal_cdf(lower), 0.0, 1.0))
+
+
 class PlanarRelativeKalmanFilter:
     """Four-state causal filter: forward, lateral, and their velocities."""
 
