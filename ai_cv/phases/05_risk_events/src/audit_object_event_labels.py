@@ -14,6 +14,10 @@ VALID = {
     "path_relation": {"on_path", "adjacent", "crossing", "diverging", "uncertain"},
     "relative_motion": {"closing", "steady", "opening", "uncertain"},
     "occluded": {"yes", "no", "unknown"},
+    "candidate_type": {
+        "road_user", "static_structure", "shadow_reflection",
+        "stereo_artifact", "mixed_unknown", "unknown",
+    },
     "review_confidence": {"high", "medium", "low"},
 }
 
@@ -60,6 +64,7 @@ def main() -> None:
         "event_owner_counts": dict(Counter(row["event_owner"] for row in complete)),
         "path_relation_counts": dict(Counter(row["path_relation"] for row in complete)),
         "motion_counts": dict(Counter(row["relative_motion"] for row in complete)),
+        "candidate_type_counts": dict(Counter(row["candidate_type"] for row in complete)),
         "high_or_medium_confidence_rows": high_or_medium,
         "provisional_ai_assumption_lines": provisional_lines,
         "reviewable_cpa_rows": sum(row["cpa_distance_m"] != "unknown" for row in complete),

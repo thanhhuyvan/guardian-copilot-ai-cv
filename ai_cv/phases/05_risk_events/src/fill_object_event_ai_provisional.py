@@ -34,6 +34,7 @@ def main() -> None:
             "relative_motion": "closing",
             "cpa_distance_m": "unknown",
             "occluded": "unknown",
+            "candidate_type": "unknown",
             "review_confidence": "low",
             "notes": "PROVISIONAL_AI_ASSUMPTION; camera-position heuristic only; not ground truth",
         })

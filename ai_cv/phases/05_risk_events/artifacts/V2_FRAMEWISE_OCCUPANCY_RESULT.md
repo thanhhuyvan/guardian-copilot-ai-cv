@@ -52,8 +52,10 @@ value may be tuned from the six trips.
 2. Corrected hard-IoU occupancy suppression reduces overall F1 to `0.547`.
 3. Coverage audit explains why V2 cannot be a broad V1 repair yet: it covers
    only 34/112 V1 false-positive frames (30%) and 66/163 V1 true-positive
-   frames (40%). In T05, 28/47 V1 false positives have no classical-to-YOLO
-   association; the remaining 17 are associated but not low occupancy.
+   frames (40%). In this V2-run eligibility audit, 28/47 T05 V1 false
+   positives fail the full classical-to-YOLO/occupancy evidence contract; the
+   remaining 17 are associated but not low occupancy. This is not identical
+   to the Phase 17 direct-association partition's 30/47 count.
 
 The next valid research step is measurement and data-association repair with
 track-level verified labels—not another risk-gate threshold experiment. V1

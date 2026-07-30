@@ -15,7 +15,7 @@ end-to-end compute **P95 65.91 ms** at batch 1 / 640 x 360.
 |---|---|---|
 | Can direct ego-path geometry separate side traffic? | Provisional blind visual review: on-path offsets averaged 0.82 m vs 11.50 m for adjacent objects. | Yes, as a narrow T01 cue. |
 | Does a fixed direct path gate improve the frozen run? | F1 0.6543 to 0.6564; two T01 false-danger frames removed; critical TTC MAE unchanged. | Small, safe diagnostic benefit only. |
-| Is hard-IoU association a coverage limit? | 30 of 47 T05 false-danger frames have no hard-IoU YOLO association. | Yes; downstream path logic cannot see them. |
+| Is hard-IoU association a coverage limit? | 30 of 47 T05 false-danger frames have no direct current hard-IoU YOLO association in the Phase 17 partition. | Yes; downstream path logic cannot see them. |
 | Can unique containment plus continuity solve that limit? | T05 F1 fell 0.5091 to 0.4906 and recall fell 0.8000 to 0.7429. | No; reject the candidate. |
 | Are associated T05 false alerts caused by noisy depth-rate? | All 13 have positive robust YOLO-box closing; median 3.168 m/s and median fit MAD 0.0098 m. | No; temporal smoothing/EKF cannot safely remove them. |
 
@@ -35,6 +35,15 @@ Without object-event correspondence, the data cannot distinguish:
 Any additional threshold, corridor, association, or Kalman tuning would
 choose between these explanations without labels. That would overfit six trips
 rather than produce defensible generalization.
+
+## Count reconciliation
+
+Two counts appear in earlier reports because they answer different questions.
+The **30/47** Phase 17 partition is the direct selected-classical-component
+association count. The **28/47** value in the V2 framewise report is its
+separate full V2-eligibility audit using that run's `v2_event_match_iou` and
+occupancy evidence. They must not be presented as the same denominator or
+interchanged in a final report.
 
 ## What is not concluded
 

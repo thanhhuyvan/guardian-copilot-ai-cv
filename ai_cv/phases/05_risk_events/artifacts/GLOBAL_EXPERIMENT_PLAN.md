@@ -43,7 +43,10 @@ Required fields:
 4. `relative_motion`: `closing`, `steady`, `opening`, or `uncertain`.
 5. `cpa_distance_m`: approximate closest approach, or `unknown`.
 6. `occluded`: `yes`, `no`, or `unknown`.
-7. `review_confidence`: `high`, `medium`, or `low`.
+7. `candidate_type`: `road_user`, `static_structure`, `shadow_reflection`,
+   `stereo_artifact`, `mixed_unknown`, or `unknown`. This separates an
+   unassociated phantom candidate from a real road-user correspondence case.
+8. `review_confidence`: `high`, `medium`, or `low`.
 
 The labels validate state and correspondence; they must never be used as
 training data or for threshold search.

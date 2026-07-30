@@ -12,6 +12,7 @@ challenge target.
 | `relative_motion` | `closing`, `steady`, `opening`, `uncertain` | Provides a visual motion check independent of stereo TTC. |
 | `cpa_distance_m` | positive number or `unknown` | Validates closest-point-of-approach estimates. |
 | `occluded` | `yes`, `no`, `unknown` | Explains unreliable geometry/tracking. |
+| `candidate_type` | `road_user`, `static_structure`, `shadow_reflection`, `stereo_artifact`, `mixed_unknown`, `unknown` | Classifies a selected classical candidate, especially when it has no semantic association. |
 | `review_confidence` | `high`, `medium`, `low` | Separates useful labels from weak visual evidence. |
 | `notes` | free text | Records ambiguity without inventing a class. |
 

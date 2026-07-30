@@ -23,7 +23,7 @@ from evaluate_path_only_gate import load_truth, parse_ttc  # noqa: E402
 FIELDS = [
     "trip_id", "frame_id", "left_image_path", "selected_track_id",
     "object_id_window", "event_owner", "path_relation", "relative_motion",
-    "cpa_distance_m", "occluded", "review_confidence", "notes",
+    "cpa_distance_m", "occluded", "candidate_type", "review_confidence", "notes",
 ]
 
 
@@ -119,7 +119,7 @@ def main() -> None:
             "selected_track_id": row.get("union_selected_track_id", ""),
             "object_id_window": "", "event_owner": "", "path_relation": "",
             "relative_motion": "", "cpa_distance_m": "", "occluded": "",
-            "review_confidence": "", "notes": "",
+            "candidate_type": "", "review_confidence": "", "notes": "",
         })
         box = selected_box(row)
         assert box is not None
