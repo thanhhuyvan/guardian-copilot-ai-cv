@@ -21,6 +21,8 @@ def main() -> None:
     with args.labels.open(encoding="utf-8", newline="") as handle:
         rows = list(csv.DictReader(handle))
         fields = list(rows[0])
+    if "candidate_type" not in fields:
+        fields.insert(fields.index("review_confidence"), "candidate_type")
     for row in rows:
         source = evidence[(row["trip_id"], row["frame_id"])]
         raw_box = source.get("union_selected_bbox_xyxy") or source.get("classical_selected_bbox_xyxy")

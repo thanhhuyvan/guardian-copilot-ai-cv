@@ -768,6 +768,7 @@ def run(
                 "depth_valid_components": 0,
                 "frames_with_depth_component": 0,
                 "frames_with_risk_track": 0,
+                "unreadable_input_frames": 0,
             }
             frames = list(dataset.iter_frames())
             if args.start_frame_index:
@@ -818,8 +819,26 @@ def run(
                 )
                 for index, frame in enumerate(frames):
                     load_started = time.perf_counter()
-                    left = dataset.load_left(frame.frame_id)
-                    right = dataset.load_right(frame.frame_id)
+                    input_degraded = False
+                    try:
+                        left = dataset.load_left(frame.frame_id)
+                        right = dataset.load_right(frame.frame_id)
+                    except OSError:
+                        # Submission data can contain a truncated JPEG.  Emit a
+                        # deterministic fail-safe frame rather than crashing or
+                        # allowing pre-dropout tracks to contaminate this frame.
+                        input_degraded = True
+                        left = np.zeros((*image_shape, 3), dtype=np.uint8)
+                        right = left.copy()
+                        tracker.reset()
+                        if classical_tracker is not None:
+                            classical_tracker.reset()
+                        if risk_machine is not None:
+                            risk_machine.reset()
+                        if v2_event_machine is not None:
+                            v2_event_machine.reset()
+                        v2_detector_filters.clear()
+                        v2_classical_filters.clear()
                     image_load_ms = (time.perf_counter() - load_started) * 1000.0
                     if image_transform is not None:
                         left, right = image_transform(
@@ -1325,7 +1344,8 @@ def run(
                             "detector_inference_ms": detector_inference_ms,
                             "detector_postprocess_ms": detector_postprocess_ms,
                             "postprocess_ttc_ms": postprocess_ms,
-                            "pipeline_compute_ms": pipeline_compute_ms,
+                                "pipeline_compute_ms": pipeline_compute_ms,
+                                "input_degraded": input_degraded,
                             "detections": len(detections),
                             "depth_valid_components": len(components),
                             "risk_tracks": len(risk_tracks),
@@ -1341,6 +1361,7 @@ def run(
                         process.memory_info().rss / (1024.0 * 1024.0),
                     )
                     if repeat_index == 0:
+                        stats["unreadable_input_frames"] += int(input_degraded)
                         stats["detections"] += len(detections)
                         stats["depth_valid_components"] += len(components)
                         stats["frames_with_depth_component"] += int(
@@ -1369,6 +1390,7 @@ def run(
                             {
                                 "frame_id": int(frame.frame_id),
                                 "timestamp": float(frame.timestamp),
+                                "input_degraded": input_degraded,
                                 # Backward-compatible detector-owned TTC.
                                 "predicted_ttc": _ttc_text(float(capped_ttc)),
                                 "classical_predicted_ttc": _ttc_text(
