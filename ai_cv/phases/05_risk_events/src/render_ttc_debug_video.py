@@ -91,10 +91,10 @@ def run(args: argparse.Namespace) -> None:
             )
             cv2.putText(
                 image,
-                f"pred {_text(prediction)} | GT {_text(actual)} | {row['union_source']}",
+                f"pred {_text(prediction)} | GT {_text(actual)} | {row.get('union_source', 'conservative_union')}",
                 (10, 48), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1,
             )
-            for detection in json.loads(row["raw_detections_json"]):
+            for detection in json.loads(row.get("raw_detections_json", "[]")):
                 x0, y0, x1, y1 = (int(value) for value in detection["bbox_xyxy"])
                 cv2.rectangle(image, (x0, y0), (x1, y1), (255, 180, 0), 1)
                 cv2.putText(
