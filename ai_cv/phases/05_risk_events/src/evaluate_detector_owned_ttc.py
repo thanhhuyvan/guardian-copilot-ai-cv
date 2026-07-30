@@ -1001,10 +1001,17 @@ def run(
                         **common,
                     )
                     classical_risk_tracks: list[object] = []
+                    classical_tracks: list[object] = []
+                    v2_shadow_updates: list[dict[str, object]] = []
                     classical_ttc = math.inf
                     classical_track_id = None
                     classical_confidence = 0.0
                     classical_closing = 0.0
+                    # Evidence rows are also emitted for causal scored/redacted
+                    # trips, where the optional classical-union policy is off.
+                    # Keep its fixed V1 defaults defined in that mode.
+                    classical_minimum_closing_speed_mps = 0.3
+                    use_low_ego_gate = False
                     union_ttc = float(capped_ttc)
                     union_track_id = capped_track_id
                     union_confidence = float(capped_confidence)
@@ -1512,9 +1519,19 @@ def run(
 
             trip_report: dict[str, object] = {"coverage": stats, "metrics": {}}
             truth_array = np.asarray(truth, dtype=float)
+            # Scored/redacted trips intentionally contain no TTC ground truth.
+            # Continue emitting causal predictions, but never manufacture an
+            # F1/MAE from all-NaN references.
+            has_reference_ttc = bool(np.any(np.isfinite(truth_array)))
+            trip_report["ground_truth_available"] = has_reference_ttc
             for policy_name, predictions in policies.items():
-                metrics = score(np.asarray(predictions, dtype=float), truth_array)
-                trip_report["metrics"][policy_name] = asdict(metrics)
+                if has_reference_ttc:
+                    metrics = score(np.asarray(predictions, dtype=float), truth_array)
+                    trip_report["metrics"][policy_name] = asdict(metrics)
+                else:
+                    trip_report["metrics"][policy_name] = {
+                        "status": "unavailable_redacted_ground_truth"
+                    }
                 rows = [
                     {
                         "frame_id": int(frame.frame_id),

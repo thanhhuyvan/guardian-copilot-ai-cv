@@ -27,6 +27,7 @@ def main() -> None:
         rows = list(csv.DictReader(handle))
     invalid: dict[str, list[int]] = {field: [] for field in VALID}
     complete = []
+    provisional_lines: list[int] = []
     for index, row in enumerate(rows, start=2):
         is_complete = True
         for field, values in VALID.items():
@@ -40,6 +41,17 @@ def main() -> None:
             is_complete = False
         if is_complete:
             complete.append(row)
+        if "PROVISIONAL_AI_ASSUMPTION" in row.get("notes", ""):
+            provisional_lines.append(index)
+    high_or_medium = sum(row["review_confidence"] in {"high", "medium"} for row in complete)
+    has_reviewable_cpa = any(row["cpa_distance_m"] != "unknown" for row in complete)
+    ready = (
+        len(complete) >= 30
+        and not any(invalid.values())
+        and not provisional_lines
+        and high_or_medium >= 30
+        and has_reviewable_cpa
+    )
     report = {
         "total_rows": len(rows),
         "complete_rows": len(complete),
@@ -48,12 +60,12 @@ def main() -> None:
         "event_owner_counts": dict(Counter(row["event_owner"] for row in complete)),
         "path_relation_counts": dict(Counter(row["path_relation"] for row in complete)),
         "motion_counts": dict(Counter(row["relative_motion"] for row in complete)),
-        "high_or_medium_confidence_rows": sum(
-            row["review_confidence"] in {"high", "medium"} for row in complete
-        ),
+        "high_or_medium_confidence_rows": high_or_medium,
+        "provisional_ai_assumption_lines": provisional_lines,
+        "reviewable_cpa_rows": sum(row["cpa_distance_m"] != "unknown" for row in complete),
         "decision": (
             "ready_for_state_validation"
-            if len(complete) >= 30 and not any(invalid.values())
+            if ready
             else "labels_incomplete_no_state_or_f1_experiment"
         ),
     }
