@@ -52,6 +52,7 @@ def render_clip(
     target_box: tuple[int, int, int, int], radius: int, output: Path,
 ) -> None:
     writer = None
+    contact_frames = []
     for current in range(max(0, frame_id - radius), frame_id + radius + 1):
         path = practice_root / trip_id / "kitti" / "image_2" / f"{current:06d}.jpg"
         image = cv2.imread(str(path))
@@ -69,8 +70,18 @@ def render_clip(
             cv2.putText(image, "review object", (x0, max(18, y0 - 5)), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 255, 255), 2, cv2.LINE_AA)
         cv2.putText(image, f"frame {current}", (8, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 2, cv2.LINE_AA)
         writer.write(image)
+        if current in {max(0, frame_id - radius), frame_id, frame_id + radius}:
+            contact_frames.append(image.copy())
     if writer is not None:
         writer.release()
+    if contact_frames:
+        while len(contact_frames) < 3:
+            contact_frames.append(contact_frames[-1])
+        sheet = cv2.hconcat(contact_frames[:3])
+        contact_path = output.parent.parent.parent / "contact_sheets" / trip_id / f"{frame_id:06d}.jpg"
+        contact_path.parent.mkdir(parents=True, exist_ok=True)
+        if not cv2.imwrite(str(contact_path), sheet):
+            raise RuntimeError(f"could not create {contact_path}")
 
 
 def main() -> None:
