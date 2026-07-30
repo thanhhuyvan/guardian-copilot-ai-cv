@@ -1,0 +1,32 @@
+{
+  "release": "guardian-v1",
+  "model": {
+    "backend": "yolo26-pytorch",
+    "filename": "yolo26n.pt",
+    "sha256": "9b09cc8bf347f0fc8a5f7657480587f25db09b34bf33b0652110fb03a8ad4fef"
+  },
+  "input": {
+    "stereo_width": 640,
+    "stereo_height": 360,
+    "ego_telemetry": ["speed_kmh", "longitudinal_accel", "lateral_accel"]
+  },
+  "pipeline": {
+    "stereo": "dual_sgbm",
+    "ttc_policy": "conservative_union",
+    "risk_events": "integrated_deterministic_fsm",
+    "opencv_threads": 2,
+    "stereo_workers": 2,
+    "detector_confidence": 0.25
+  },
+  "safety": {
+    "processing_mode": "causal_online",
+    "uses_future_frames": false,
+    "uses_full_event_schedule": false,
+    "depth_keyframe_policy": "validation_only",
+    "unreadable_input": "blank_stereo_reset_trackers_emit_non_danger"
+  },
+  "contracts": {
+    "perception": "perception.v1",
+    "risk_event": "risk_event.v1"
+  }
+}
